@@ -1,36 +1,51 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState, useEffect } from "react";
 
-const Popup: React.FC = () => {
-  const [isOpen, setIsOpen] = useState(false);
-
-  const togglePopup = () => {
-    setIsOpen(!isOpen);
-  };
+export default function Popup() {
+  const [isEnabled, setIsEnabled] = useState(true);
+  const [focusMode, setFocusMode] = useState(false);
+  const [timer, setTimer] = useState(25);
 
   return (
-    <div>
-      <button
-        className="px-4 py-2 bg-blue-500 text-white rounded"
-        onClick={togglePopup}
-      >
-        Open Popup
-      </button>
-      {isOpen && (
-        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 p-5 bg-white border border-gray-300 shadow-lg z-50">
-          <h2 className="text-lg font-bold">Procrastination Buster</h2>
-          <p className="mt-2">This is your popup content.</p>
+    <div className="w-80 p-4 bg-white shadow-lg rounded-lg">
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-xl font-bold">ProcrastinationBuster</h1>
+        <button
+          className={`${
+            isEnabled ? "bg-green-500" : "bg-red-500"
+          } px-3 py-1 rounded-full text-white text-sm`}
+          onClick={() => setIsEnabled(!isEnabled)}
+        >
+          {isEnabled ? "Enabled" : "Disabled"}
+        </button>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <span>Focus Mode</span>
           <button
-            className="mt-4 px-4 py-2 bg-red-500 text-white rounded"
-            onClick={togglePopup}
+            className={`${
+              focusMode ? "bg-blue-500" : "bg-gray-300"
+            } px-3 py-1 rounded-full text-white text-sm`}
+            onClick={() => setFocusMode(!focusMode)}
           >
-            Close Popup
+            {focusMode ? "On" : "Off"}
           </button>
         </div>
-      )}
+
+        <div>
+          <label className="block text-sm mb-1">Focus Timer (minutes)</label>
+          <input
+            type="number"
+            value={timer}
+            onChange={(e) => setTimer(Number(e.target.value))}
+            className="w-full px-3 py-2 border rounded-lg"
+            min="1"
+            max="60"
+          />
+        </div>
+      </div>
     </div>
   );
-};
-
-export default Popup;
+}
