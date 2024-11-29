@@ -10,11 +10,7 @@
           "alarms"
      ],
      "background": {
-          "service_worker": "background.js",
-          "scripts": [
-               "siteBlocking.js",
-               "procrastinationPrompts.js"
-          ]
+          "service_worker": "background.js"
      },
      "content_scripts": [
           {
