@@ -22,7 +22,8 @@
                     "<all_urls>"
                ],
                "js": [
-                    "content.js"
+                    "content.js",
+                    "pageTracking.js"
                ]
           }
      ],
