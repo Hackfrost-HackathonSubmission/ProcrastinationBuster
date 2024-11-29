@@ -12,7 +12,8 @@
      "background": {
           "service_worker": "background.js",
           "scripts": [
-               "siteBlocking.js"
+               "siteBlocking.js",
+               "procrastinationPrompts.js"
           ]
      },
      "action": {
