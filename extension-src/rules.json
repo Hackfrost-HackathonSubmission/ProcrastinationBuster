@@ -1,3 +1,17 @@
 {
-     "rules": []
+     "rules": [
+          {
+               "id": 1,
+               "priority": 1,
+               "action": {
+                    "type": "block"
+               },
+               "condition": {
+                    "urlFilter": "*",
+                    "resourceTypes": [
+                         "main_frame"
+                    ]
+               }
+          }
+     ]
 }

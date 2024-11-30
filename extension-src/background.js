@@ -150,10 +150,11 @@ async function updateBlockingRules() {
         id: index + 1,
         priority: 1,
         action: {
-          type: "block",
+          type: "redirect",
+          redirect: { extensionPath: "/blocked.html" },
         },
         condition: {
-          urlFilter: site,
+          urlFilter: "*://*." + site.replace(/^https?:\/\/(www\.)?/, ""),
           resourceTypes: ["main_frame"],
         },
       }));
