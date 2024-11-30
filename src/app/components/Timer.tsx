@@ -18,7 +18,14 @@ interface TimerState {
   totalDuration: number;
 }
 
-export default function Timer({ settings, onUpdateSettings }: TimerProps) {
+const formatTime = (totalSeconds: number): string => {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+};
+
+export default function Timer(props: TimerProps) {
+  const { settings, onUpdateSettings } = props;
   const [timerState, setTimerState] = useState<TimerState>({
     isRunning: false,
     remainingTime: 0,
@@ -27,27 +34,48 @@ export default function Timer({ settings, onUpdateSettings }: TimerProps) {
 
   useEffect(() => {
     const loadTimerState = async () => {
-      const result = await browserAPI.runtime.sendMessage({
-        action: "getTimeRemaining",
-      });
+      try {
+        const result = await browserAPI.runtime.sendMessage({
+          action: "getTimeRemaining",
+        });
 
-      if (result) {
         setTimerState({
-          isRunning: result.isRunning ?? false,
-          remainingTime: result.remainingTime ?? 0,
-          totalDuration: result.totalDuration ?? 0,
+          isRunning: result?.isRunning ?? false,
+          remainingTime: result?.remainingTime ?? 0,
+          totalDuration: result?.totalDuration ?? 0,
+        });
+      } catch (error) {
+        console.error("Error loading timer state:", error);
+        setTimerState({
+          isRunning: false,
+          remainingTime: 0,
+          totalDuration: 0,
         });
       }
     };
 
     loadTimerState();
-  }, []);
 
-  const formatTime = (totalSeconds: number): string => {
-    const minutes = Math.floor(totalSeconds / 60);
-    const remainingSeconds = totalSeconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-  };
+    const intervalId = setInterval(async () => {
+      if (timerState.isRunning) {
+        try {
+          const result = await browserAPI.runtime.sendMessage({
+            action: "getTimeRemaining",
+          });
+
+          setTimerState({
+            isRunning: result?.isRunning ?? false,
+            remainingTime: result?.remainingTime ?? 0,
+            totalDuration: result?.totalDuration ?? 0,
+          });
+        } catch (error) {
+          console.error("Error updating timer state:", error);
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [timerState.isRunning]);
 
   const startFocusSession = async () => {
     const minutes = settings.focusTimer;
@@ -130,6 +158,7 @@ export default function Timer({ settings, onUpdateSettings }: TimerProps) {
       100
     );
   };
+
   return (
     <div className="space-y-4">
       <div className="relative pt-4">

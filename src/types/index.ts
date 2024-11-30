@@ -6,6 +6,7 @@ export interface TimerSession {
   remainingTime: number;
 }
 
+
 export interface Streak {
   current: number;
   best: number;

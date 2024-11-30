@@ -107,7 +107,6 @@ if (
         });
       }
 
-      // Make sure static rules are disabled
       const rulesetIds =
         await chrome.declarativeNetRequest.getEnabledRulesets();
       if (rulesetIds.length > 0) {
@@ -140,14 +139,22 @@ if (
   }
 
   async function startTimer(minutes, isBreak = false) {
+    const startTime = Date.now();
     remainingTime = Math.round(minutes * 60);
     isPaused = false;
+
+    console.log("Starting timer:", {
+      minutes,
+      isBreak,
+      startTime,
+      remainingTime,
+    });
 
     createTimerAlarm(minutes);
 
     await chrome.storage.sync.set({
       currentSession: {
-        startTime: Date.now(),
+        startTime: startTime,
         duration: minutes,
         isBreak: isBreak,
         isPaused: false,
@@ -383,16 +390,22 @@ if (
             let remaining;
 
             if (isPaused) {
-              remaining = Math.round(storedRemaining);
+              remaining = storedRemaining;
             } else {
               const elapsed = Math.floor((Date.now() - startTime) / 1000);
-              remaining = Math.round(Math.max(0, duration * 60 - elapsed));
+              remaining = Math.max(0, duration * 60 - elapsed);
             }
+            console.log("Timer state:", {
+              remaining,
+              isPaused,
+              duration,
+              elapsed: Date.now() - startTime,
+            });
 
             sendResponse({
               remainingTime: remaining,
               isRunning: !isPaused,
-              totalDuration: Math.round(duration * 60),
+              totalDuration: duration * 60,
             });
           } else {
             sendResponse({
