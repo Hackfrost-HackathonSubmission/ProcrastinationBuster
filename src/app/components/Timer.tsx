@@ -30,8 +30,10 @@ const Timer: React.FC<TimerProps> = ({ settings, onUpdateSettings }) => {
         setTimerState((prev) => ({
           ...prev,
           isRunning: true,
-          remainingTime: response.remainingTime,
-          totalDuration: response.totalDuration || response.remainingTime,
+          remainingTime: Math.round(response.remainingTime),
+          totalDuration: Math.round(
+            response.totalDuration || response.remainingTime
+          ),
         }));
       }
     });
@@ -42,8 +44,8 @@ const Timer: React.FC<TimerProps> = ({ settings, onUpdateSettings }) => {
         if (response.remainingTime >= 0) {
           setTimerState((prev) => ({
             ...prev,
-            remainingTime: response.remainingTime,
-            isRunning: response.remainingTime > 0,
+            remainingTime: Math.round(response.remainingTime),
+            isRunning: response.isRunning,
           }));
         }
       });
@@ -54,8 +56,9 @@ const Timer: React.FC<TimerProps> = ({ settings, onUpdateSettings }) => {
   }, []);
 
   const formatTime = (seconds: number): string => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
+    const totalSeconds = Math.round(seconds);
+    const minutes = Math.floor(totalSeconds / 60);
+    const remainingSeconds = totalSeconds % 60;
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   };
 
@@ -65,6 +68,7 @@ const Timer: React.FC<TimerProps> = ({ settings, onUpdateSettings }) => {
       {
         action: "startTimer",
         minutes,
+        isBreak: false,
       },
       () => {
         setTimerState({
@@ -87,6 +91,7 @@ const Timer: React.FC<TimerProps> = ({ settings, onUpdateSettings }) => {
       {
         action: "startTimer",
         minutes,
+        isBreak: true,
       },
       () => {
         setTimerState({
@@ -148,9 +153,10 @@ const Timer: React.FC<TimerProps> = ({ settings, onUpdateSettings }) => {
 
   const getProgressPercentage = (): number => {
     if (timerState.totalDuration === 0) return 0;
-    return (
+    return Math.min(
       ((timerState.totalDuration - timerState.remainingTime) /
         timerState.totalDuration) *
+        100,
       100
     );
   };

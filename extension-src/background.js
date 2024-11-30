@@ -1,4 +1,3 @@
-// Global variables for timer management
 let timer = null;
 let remainingTime = 0;
 let isPaused = false;
@@ -25,12 +24,10 @@ chrome.runtime.onInstalled.addListener(() => {
     },
   });
 
-  // Set initial badge state
   chrome.action.setBadgeBackgroundColor({ color: "#4CAF50" });
   chrome.action.setBadgeText({ text: "" });
 });
 
-// Clear all blocking rules function
 async function clearAllBlockingRules() {
   try {
     const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
@@ -44,14 +41,13 @@ async function clearAllBlockingRules() {
   }
 }
 
-// Format time for display
 function formatTime(seconds) {
-  const minutes = Math.floor(seconds / 60);
-  const remainingSecs = Math.floor(seconds % 60);
+  const totalSeconds = Math.round(seconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSecs = Math.floor(totalSeconds % 60);
   return `${minutes}:${remainingSecs.toString().padStart(2, "0")}`;
 }
 
-// Timer Alarm Management
 function createTimerAlarm(minutes) {
   chrome.alarms.create("timer", {
     when: Date.now() + minutes * 60 * 1000,
@@ -62,25 +58,22 @@ function clearTimerAlarm() {
   chrome.alarms.clear("timer");
 }
 
-// Start timer
 async function startTimer(minutes, isBreak = false) {
-  remainingTime = minutes * 60;
+  remainingTime = Math.round(minutes * 60);
   isPaused = false;
 
-  // Create an alarm for when the timer should end
   createTimerAlarm(minutes);
 
-  // Store timer state
   await chrome.storage.sync.set({
     currentSession: {
       startTime: Date.now(),
       duration: minutes,
       isBreak: isBreak,
       isPaused: false,
+      remainingTime: remainingTime,
     },
   });
 
-  // Update blocking rules based on session type
   if (!isBreak) {
     await chrome.storage.sync.set({ focusMode: true });
   } else {
@@ -88,19 +81,21 @@ async function startTimer(minutes, isBreak = false) {
     await clearAllBlockingRules();
   }
 
-  // Update badge
   updateBadge();
 }
 
-// Pause timer
 async function pauseTimer() {
   isPaused = true;
   clearTimerAlarm();
 
   const data = await chrome.storage.sync.get(["currentSession"]);
   if (data.currentSession) {
-    const elapsed = (Date.now() - data.currentSession.startTime) / 1000;
-    remainingTime = Math.max(0, data.currentSession.duration * 60 - elapsed);
+    const elapsed = Math.floor(
+      (Date.now() - data.currentSession.startTime) / 1000
+    );
+    remainingTime = Math.round(
+      Math.max(0, data.currentSession.duration * 60 - elapsed)
+    );
 
     await chrome.storage.sync.set({
       currentSession: {
@@ -111,11 +106,9 @@ async function pauseTimer() {
     });
   }
 
-  // Clear blocking rules when paused
   await clearAllBlockingRules();
 }
 
-// Resume timer
 async function resumeTimer() {
   const data = await chrome.storage.sync.get(["currentSession"]);
   if (data.currentSession && data.currentSession.isPaused) {
@@ -128,19 +121,18 @@ async function resumeTimer() {
         startTime: Date.now(),
         duration: minutes,
         isPaused: false,
+        remainingTime: remainingTime,
       },
     });
 
     createTimerAlarm(minutes);
 
-    // Reapply blocking rules if it's a focus session
     if (!data.currentSession.isBreak) {
       await updateBlockingRules();
     }
   }
 }
 
-// Update badge every minute
 function updateBadge() {
   chrome.storage.sync.get(["currentSession"], (data) => {
     if (data.currentSession) {
@@ -153,23 +145,23 @@ function updateBadge() {
       let timeToDisplay;
 
       if (isPaused) {
-        timeToDisplay = storedRemaining;
+        timeToDisplay = Math.round(storedRemaining);
       } else {
-        const elapsed = (Date.now() - startTime) / 1000;
-        timeToDisplay = Math.max(0, duration * 60 - elapsed);
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        timeToDisplay = Math.round(Math.max(0, duration * 60 - elapsed));
       }
 
-      chrome.action.setBadgeText({
-        text: formatTime(timeToDisplay),
-      });
+      const minutes = Math.floor(timeToDisplay / 60);
+      const seconds = Math.floor(timeToDisplay % 60);
+      const displayText = `${minutes}:${seconds.toString().padStart(2, "0")}`;
+
+      chrome.action.setBadgeText({ text: displayText });
     }
   });
 }
 
-// Create an alarm to update badge
 chrome.alarms.create("updateBadge", { periodInMinutes: 1 });
 
-// Handle alarms
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "timer") {
     endTimer();
@@ -182,10 +174,8 @@ async function endTimer() {
   clearTimerAlarm();
 
   try {
-    // Clear all blocking rules
     await clearAllBlockingRules();
 
-    // Update stats if needed
     const sessionData = await chrome.storage.sync.get(["currentSession"]);
     if (sessionData.currentSession && !sessionData.currentSession.isBreak) {
       const statsData = await chrome.storage.sync.get(["stats"]);
@@ -194,19 +184,16 @@ async function endTimer() {
       await chrome.storage.sync.set({ stats });
     }
 
-    // Clear session and focus mode
     await chrome.storage.sync.set({
       currentSession: null,
       focusMode: false,
     });
 
-    // Update UI
     await chrome.action.setBadgeText({ text: "" });
 
-    // Show notification
     chrome.notifications.create({
       type: "basic",
-      iconUrl: "/icons/icon48.png", // Make sure this path matches your extension's icon path
+      iconUrl: "/icons/icon48.png",
       title: "Timer Complete!",
       message: "Great job! Take a break or start another session.",
       silent: true,
@@ -218,7 +205,6 @@ async function endTimer() {
 
 async function updateBlockingRules() {
   try {
-    // First, clear all existing rules
     await clearAllBlockingRules();
 
     const data = await chrome.storage.sync.get([
@@ -230,13 +216,6 @@ async function updateBlockingRules() {
 
     const { isEnabled, focusMode, blockedSites, currentSession } = data;
 
-    // Only add rules if:
-    // 1. Extension is enabled
-    // 2. Focus mode is active
-    // 3. There are blocked sites
-    // 4. There is an active session
-    // 5. The session is not paused
-    // 6. The session is not a break
     if (
       isEnabled &&
       focusMode &&
@@ -267,12 +246,10 @@ async function updateBlockingRules() {
   }
 }
 
-// Handle extension cleanup
 chrome.runtime.onSuspend.addListener(() => {
   clearAllBlockingRules();
 });
 
-// Message handler
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   switch (request.action) {
     case "startTimer":
@@ -303,16 +280,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           let remaining;
 
           if (isPaused) {
-            remaining = storedRemaining;
+            remaining = Math.round(storedRemaining);
           } else {
-            const elapsed = (Date.now() - startTime) / 1000;
-            remaining = Math.max(0, duration * 60 - elapsed);
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            remaining = Math.round(Math.max(0, duration * 60 - elapsed));
           }
 
           sendResponse({
             remainingTime: remaining,
             isRunning: !isPaused,
-            totalDuration: duration * 60,
+            totalDuration: Math.round(duration * 60),
           });
         } else {
           sendResponse({
@@ -326,16 +303,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// Listen for storage changes to update blocking rules
 chrome.storage.onChanged.addListener((changes, namespace) => {
-  if (namespace === "sync") {
-    if (
-      changes.currentSession ||
+  if (
+    namespace === "sync" &&
+    (changes.currentSession ||
       changes.focusMode ||
       changes.blockedSites ||
-      changes.isEnabled
-    ) {
-      updateBlockingRules();
-    }
+      changes.isEnabled)
+  ) {
+    updateBlockingRules();
   }
 });
