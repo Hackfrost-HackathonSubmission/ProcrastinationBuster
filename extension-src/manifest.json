@@ -1,0 +1,22 @@
+{
+     "manifest_version": 3,
+     "name": "ProcrastinationBuster",
+     "version": "1.0.0",
+     "description": "Control your attention span and boost productivity",
+     "permissions": [
+          "storage",
+          "tabs",
+          "webRequest",
+          "alarms",
+          "notifications"
+     ],
+     "action": {
+          "default_popup": "popup.html"
+     },
+     "background": {
+          "service_worker": "background.js"
+     },
+     "host_permissions": [
+          "<all_urls>"
+     ]
+}

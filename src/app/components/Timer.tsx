@@ -56,6 +56,28 @@ export default function Timer() {
     }
   }, [stats, focusLength, mode]);
 
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+
+    if (isActive && timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft((time) => {
+          if (time <= 1) {
+            clearInterval(interval!);
+            setIsActive(false);
+            updateStats(); // Call updateStats when timer completes
+            return 0;
+          }
+          return time - 1;
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isActive, timeLeft, updateStats]);
+
   const startTimer = () => {
     const startTime = Date.now();
     chrome.storage?.sync?.set({
@@ -130,12 +152,12 @@ export default function Timer() {
       >
         {isActive
           ? `${mode === "focus" ? "Focus" : "Break"} Session Active`
-          : `Start ${mode === "focus" ? "Focus" : "Break"} Session`}
+          : `Start ${mode === "focus" ? "Break" : "Focus"} Session`}
       </button>
 
       {/* Stats Section */}
       <div className="mt-8 text-left">
-        <h3 className="text-lg font-semibold mb-2">Today's Progress</h3>
+        <h3 className="text-lg font-semibold mb-2">Today&apos;s Progress</h3>
         <div className="space-y-2">
           <p>Focus Time: {Math.round(stats.dailyFocusTime)} minutes</p>
           <p>Weekly Focus: {Math.round(stats.weeklyFocusTime)} minutes</p>

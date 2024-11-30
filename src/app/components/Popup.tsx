@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 export default function Popup() {
   const [isEnabled, setIsEnabled] = useState(true);
