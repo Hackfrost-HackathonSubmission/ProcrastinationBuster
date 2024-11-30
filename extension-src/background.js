@@ -1,9 +1,36 @@
 let timer = null;
 let remainingTime = 0;
 let isPaused = false;
+let activeRuleIds = new Set();
+
+// Initialize rules function
+async function initializeRules() {
+  try {
+    // Clear any existing dynamic rules
+    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: existingRules.map((rule) => rule.id),
+    });
+
+    // Disable static rules
+    const staticRuleSets =
+      await chrome.declarativeNetRequest.getAvailableStaticRuleCount();
+    if (staticRuleSets > 0) {
+      const rulesetIds =
+        await chrome.declarativeNetRequest.getEnabledRulesets();
+      await chrome.declarativeNetRequest.updateEnabledRulesets({
+        disableRulesetIds: rulesetIds,
+      });
+    }
+  } catch (error) {
+    console.error("Error initializing rules:", error);
+  }
+}
 
 // Initialize extension on install
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
+  await initializeRules();
+
   chrome.storage.sync.set({
     isEnabled: true,
     focusMode: false,
@@ -28,14 +55,49 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.action.setBadgeText({ text: "" });
 });
 
+// Clear rules on startup
+chrome.runtime.onStartup.addListener(async () => {
+  await initializeRules();
+});
+
+// Add cleanup handlers for extension unload/update
+chrome.runtime.onSuspend.addListener(async () => {
+  await clearAllBlockingRules();
+});
+
+chrome.runtime.onUpdateAvailable.addListener(async () => {
+  await clearAllBlockingRules();
+});
+
 async function clearAllBlockingRules() {
   try {
+    // Clear dynamic rules
     const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
     if (existingRules.length > 0) {
       await chrome.declarativeNetRequest.updateDynamicRules({
         removeRuleIds: existingRules.map((rule) => rule.id),
       });
+      activeRuleIds.clear();
     }
+
+    // Double check dynamic rules are cleared
+    const remainingRules = await chrome.declarativeNetRequest.getDynamicRules();
+    if (remainingRules.length > 0) {
+      console.error("Rules still exist after clearing:", remainingRules);
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: remainingRules.map((rule) => rule.id),
+      });
+    }
+
+    // Make sure static rules are disabled
+    const rulesetIds = await chrome.declarativeNetRequest.getEnabledRulesets();
+    if (rulesetIds.length > 0) {
+      await chrome.declarativeNetRequest.updateEnabledRulesets({
+        disableRulesetIds: rulesetIds,
+      });
+    }
+
+    console.log("All blocking rules cleared successfully");
   } catch (error) {
     console.error("Error clearing blocking rules:", error);
   }
@@ -107,7 +169,6 @@ async function pauseTimer() {
     });
   }
 
-  // Clear blocking rules when timer is paused
   await clearAllBlockingRules();
 }
 
@@ -164,6 +225,73 @@ function updateBadge() {
   });
 }
 
+async function updateBlockingRules() {
+  try {
+    await clearAllBlockingRules();
+
+    const data = await chrome.storage.sync.get([
+      "isEnabled",
+      "focusMode",
+      "blockedSites",
+      "currentSession",
+    ]);
+
+    const { isEnabled, focusMode, blockedSites, currentSession } = data;
+
+    console.log("Current state:", {
+      isEnabled,
+      focusMode,
+      hasBlockedSites: blockedSites?.length > 0,
+      hasCurrentSession: !!currentSession,
+      isPaused: currentSession?.isPaused,
+      isBreak: currentSession?.isBreak,
+    });
+
+    if (
+      !isEnabled ||
+      !focusMode ||
+      !blockedSites?.length ||
+      !currentSession ||
+      currentSession.isPaused ||
+      currentSession.isBreak
+    ) {
+      console.log("Conditions not met for blocking, clearing rules");
+      await clearAllBlockingRules();
+      return;
+    }
+
+    const rules = blockedSites.map((site, index) => {
+      // Remove protocol and www if present
+      const cleanedSite = site.replace(/^https?:\/\/(www\.)?/, "");
+
+      return {
+        id: index + 1000,
+        priority: 1,
+        action: {
+          type: "redirect",
+          redirect: { extensionPath: "/blocked.html" },
+        },
+        condition: {
+          urlFilter: `*://*${cleanedSite}/*`, // Updated URL filtering pattern
+          resourceTypes: ["main_frame"],
+        },
+      };
+    });
+
+    activeRuleIds = new Set(rules.map((rule) => rule.id));
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: (
+        await chrome.declarativeNetRequest.getDynamicRules()
+      ).map((rule) => rule.id),
+      addRules: rules,
+    });
+    console.log("Blocking rules updated successfully:", rules);
+  } catch (error) {
+    console.error("Error updating blocking rules:", error);
+    await clearAllBlockingRules();
+  }
+}
+
 chrome.alarms.create("updateBadge", { periodInMinutes: 1 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -178,7 +306,7 @@ async function endTimer() {
   clearTimerAlarm();
 
   try {
-    // Clear blocking rules first
+    console.log("Timer ending, clearing all blocking rules");
     await clearAllBlockingRules();
 
     const sessionData = await chrome.storage.sync.get(["currentSession"]);
@@ -189,14 +317,14 @@ async function endTimer() {
       await chrome.storage.sync.set({ stats });
     }
 
-    // Set focus mode to false and clear session
     await chrome.storage.sync.set({
       currentSession: null,
       focusMode: false,
     });
 
-    // Clear badge text
     await chrome.action.setBadgeText({ text: "" });
+
+    await clearAllBlockingRules();
 
     chrome.notifications.create({
       type: "basic",
@@ -207,60 +335,9 @@ async function endTimer() {
     });
   } catch (error) {
     console.error("Error in endTimer:", error);
-  }
-}
-
-async function updateBlockingRules() {
-  try {
-    // Always clear existing rules first
     await clearAllBlockingRules();
-
-    const data = await chrome.storage.sync.get([
-      "isEnabled",
-      "focusMode",
-      "blockedSites",
-      "currentSession",
-    ]);
-
-    const { isEnabled, focusMode, blockedSites, currentSession } = data;
-
-    // If any of these conditions are false, we should not add new blocking rules
-    if (
-      !isEnabled ||
-      !focusMode ||
-      !blockedSites?.length ||
-      !currentSession ||
-      currentSession.isPaused ||
-      currentSession.isBreak
-    ) {
-      return; // Exit without adding new rules
-    }
-
-    const rules = blockedSites.map((site, index) => ({
-      id: index + 1,
-      priority: 1,
-      action: {
-        type: "redirect",
-        redirect: { extensionPath: "/blocked.html" },
-      },
-      condition: {
-        urlFilter: `*://*${site.replace(/^https?:\/\/(www\.)?/, "")}/*`,
-        resourceTypes: ["main_frame"],
-      },
-    }));
-
-    await chrome.declarativeNetRequest.updateDynamicRules({
-      addRules: rules,
-    });
-  } catch (error) {
-    console.error("Error updating blocking rules:", error);
   }
 }
-
-// Clear rules when extension is suspended
-chrome.runtime.onSuspend.addListener(() => {
-  clearAllBlockingRules();
-});
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   switch (request.action) {
@@ -315,19 +392,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// Listen for changes in storage and update blocking rules accordingly
 chrome.storage.onChanged.addListener(async (changes, namespace) => {
   if (namespace === "sync") {
-    // If blockedSites changed and is now empty, clear all rules
-    if (
-      changes.blockedSites &&
-      (!changes.blockedSites.newValue ||
-        changes.blockedSites.newValue.length === 0)
-    ) {
-      await clearAllBlockingRules();
+    console.log("Storage changes detected:", changes);
+
+    if (changes.focusMode) {
+      if (!changes.focusMode.newValue) {
+        console.log("Focus mode disabled, clearing rules");
+        await clearAllBlockingRules();
+      }
     }
 
-    // Update rules if relevant settings changed
+    if (changes.blockedSites) {
+      if (
+        !changes.blockedSites.newValue ||
+        changes.blockedSites.newValue.length === 0
+      ) {
+        console.log("Blocked sites cleared or empty, clearing rules");
+        await clearAllBlockingRules();
+      }
+    }
+
+    if (changes.currentSession) {
+      if (!changes.currentSession.newValue) {
+        console.log("Session ended, clearing rules");
+        await clearAllBlockingRules();
+      }
+    }
+
     if (
       changes.currentSession ||
       changes.focusMode ||
@@ -338,3 +430,42 @@ chrome.storage.onChanged.addListener(async (changes, namespace) => {
     }
   }
 });
+
+// Cleanup handlers for extension unload/update
+chrome.runtime.onSuspend.addListener(async () => {
+  console.log("Extension being suspended, clearing rules");
+  await clearAllBlockingRules();
+});
+
+chrome.runtime.onUpdateAvailable.addListener(async () => {
+  console.log("Extension update available, clearing rules");
+  await clearAllBlockingRules();
+});
+
+// Handle extension uninstall
+chrome.runtime.setUninstallURL("https://forms.gle/feedback", () => {
+  clearAllBlockingRules();
+});
+
+// Handle extension reload
+chrome.runtime.onRestartRequired.addListener(async () => {
+  console.log("Extension restart required, clearing rules");
+  await clearAllBlockingRules();
+});
+
+// Make sure rules are cleared when extension is disabled
+chrome.management.onDisabled.addListener(async (info) => {
+  if (info.id === chrome.runtime.id) {
+    console.log("Extension being disabled, clearing rules");
+    await clearAllBlockingRules();
+  }
+});
+
+// Initialize rules when extension loads
+initializeRules()
+  .then(() => {
+    console.log("Rules initialized successfully");
+  })
+  .catch((error) => {
+    console.error("Error initializing rules:", error);
+  });
