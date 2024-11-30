@@ -7,7 +7,8 @@
           "storage",
           "alarms",
           "notifications",
-          "declarativeNetRequest"
+          "declarativeNetRequest",
+          "management"
      ],
      "host_permissions": [
           "<all_urls>"
@@ -22,10 +23,17 @@
           ]
      },
      "background": {
-          "service_worker": "background.js"
+          "service_worker": "background.js",
+          "type": "module"
      },
      "action": {
-          "default_popup": "popup.html"
+          "default_popup": "popup.html",
+          "default_icon": {
+               "48": "./icon48.png"
+          }
+     },
+     "icons": {
+          "48": "./icon48.png"
      },
      "web_accessible_resources": [
           {
