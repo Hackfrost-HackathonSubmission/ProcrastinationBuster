@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from "react";
-import { Settings, StorageKey } from "@/types";
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { Settings } from "@/types";
+import { browserAPI } from "@/utils/browserAPI";
 
 interface TimerProps {
   settings: Settings;
-  onUpdateSettings: <K extends StorageKey>(
+  onUpdateSettings: <K extends keyof Settings>(
     key: K,
     value: Settings[K]
   ) => Promise<void>;
@@ -15,7 +18,7 @@ interface TimerState {
   totalDuration: number;
 }
 
-const Timer: React.FC<TimerProps> = ({ settings, onUpdateSettings }) => {
+export default function Timer({ settings, onUpdateSettings }: TimerProps) {
   const [timerState, setTimerState] = useState<TimerState>({
     isRunning: false,
     remainingTime: 0,
@@ -23,182 +26,96 @@ const Timer: React.FC<TimerProps> = ({ settings, onUpdateSettings }) => {
   });
 
   useEffect(() => {
-    if (
-      typeof chrome !== "undefined" &&
-      chrome.runtime &&
-      chrome.runtime.sendMessage
-    ) {
-      // Check timer state when component mounts
-      chrome.runtime.sendMessage({ action: "getTimeRemaining" }, (response) => {
-        if (response.remainingTime > 0) {
-          setTimerState((prev) => ({
-            ...prev,
-            isRunning: true,
-            remainingTime: Math.round(response.remainingTime),
-            totalDuration: Math.round(
-              response.totalDuration || response.remainingTime
-            ),
-          }));
-        }
-      });
+    const interval = setInterval(() => {
+      if (timerState.isRunning && timerState.remainingTime > 0) {
+        setTimerState((prev) => ({
+          ...prev,
+          remainingTime: prev.remainingTime - 1,
+        }));
+      } else if (timerState.isRunning && timerState.remainingTime === 0) {
+        endTimer();
+      }
+    }, 1000);
 
-      // Set up interval to update timer display
-      const intervalId = setInterval(() => {
-        chrome.runtime.sendMessage(
-          { action: "getTimeRemaining" },
-          (response) => {
-            if (response.remainingTime >= 0) {
-              setTimerState((prev) => ({
-                ...prev,
-                remainingTime: Math.round(response.remainingTime),
-                isRunning: response.isRunning,
-              }));
-            }
-          }
-        );
-      }, 1000);
+    return () => clearInterval(interval);
+  }, [timerState.isRunning, timerState.remainingTime]);
 
-      // Cleanup interval on unmount
-      return () => clearInterval(intervalId);
-    } else {
-      console.error("Chrome runtime API is not available.");
-    }
-  }, []);
-
-  const formatTime = (seconds: number): string => {
-    const totalSeconds = Math.round(seconds);
+  const formatTime = (totalSeconds: number): string => {
     const minutes = Math.floor(totalSeconds / 60);
     const remainingSeconds = totalSeconds % 60;
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   };
 
   const startFocusSession = async () => {
-    if (
-      typeof chrome !== "undefined" &&
-      chrome.runtime &&
-      chrome.runtime.sendMessage
-    ) {
-      const minutes = settings.focusTimer;
-      chrome.runtime.sendMessage(
-        {
-          action: "startTimer",
-          minutes,
-          isBreak: false,
-        },
-        () => {
-          setTimerState({
-            isRunning: true,
-            remainingTime: minutes * 60,
-            totalDuration: minutes * 60,
-          });
+    const minutes = settings.focusTimer;
+    await browserAPI.runtime.sendMessage({
+      action: "startTimer",
+      minutes,
+      isBreak: false,
+    });
 
-          // Enable focus mode when starting a focus session
-          if (!settings.focusMode) {
-            onUpdateSettings("focusMode", true);
-          }
-        }
-      );
-    } else {
-      console.error("Chrome runtime API is not available.");
+    setTimerState({
+      isRunning: true,
+      remainingTime: minutes * 60,
+      totalDuration: minutes * 60,
+    });
+
+    if (!settings.focusMode) {
+      await onUpdateSettings("focusMode", true);
     }
   };
 
   const startBreakSession = async () => {
-    if (
-      typeof chrome !== "undefined" &&
-      chrome.runtime &&
-      chrome.runtime.sendMessage
-    ) {
-      const minutes = settings.breakTimer;
-      chrome.runtime.sendMessage(
-        {
-          action: "startTimer",
-          minutes,
-          isBreak: true,
-        },
-        () => {
-          setTimerState({
-            isRunning: true,
-            remainingTime: minutes * 60,
-            totalDuration: minutes * 60,
-          });
+    const minutes = settings.breakTimer;
+    await browserAPI.runtime.sendMessage({
+      action: "startTimer",
+      minutes,
+      isBreak: true,
+    });
 
-          // Disable focus mode during break
-          if (settings.focusMode) {
-            onUpdateSettings("focusMode", false);
-          }
-        }
-      );
-    } else {
-      console.error("Chrome runtime API is not available.");
+    setTimerState({
+      isRunning: true,
+      remainingTime: minutes * 60,
+      totalDuration: minutes * 60,
+    });
+
+    if (settings.focusMode) {
+      await onUpdateSettings("focusMode", false);
     }
   };
 
-  const pauseTimer = () => {
-    if (
-      typeof chrome !== "undefined" &&
-      chrome.runtime &&
-      chrome.runtime.sendMessage
-    ) {
-      chrome.runtime.sendMessage(
-        {
-          action: "pauseTimer",
-        },
-        () => {
-          setTimerState((prev) => ({
-            ...prev,
-            isRunning: false,
-          }));
-        }
-      );
-    } else {
-      console.error("Chrome runtime API is not available.");
-    }
+  const pauseTimer = async () => {
+    await browserAPI.runtime.sendMessage({
+      action: "pauseTimer",
+    });
+
+    setTimerState((prev) => ({
+      ...prev,
+      isRunning: false,
+    }));
   };
 
-  const resumeTimer = () => {
-    if (
-      typeof chrome !== "undefined" &&
-      chrome.runtime &&
-      chrome.runtime.sendMessage
-    ) {
-      chrome.runtime.sendMessage(
-        {
-          action: "resumeTimer",
-        },
-        () => {
-          setTimerState((prev) => ({
-            ...prev,
-            isRunning: true,
-          }));
-        }
-      );
-    } else {
-      console.error("Chrome runtime API is not available.");
-    }
+  const resumeTimer = async () => {
+    await browserAPI.runtime.sendMessage({
+      action: "resumeTimer",
+    });
+
+    setTimerState((prev) => ({
+      ...prev,
+      isRunning: true,
+    }));
   };
 
-  const endTimer = () => {
-    if (
-      typeof chrome !== "undefined" &&
-      chrome.runtime &&
-      chrome.runtime.sendMessage
-    ) {
-      chrome.runtime.sendMessage(
-        {
-          action: "endTimer",
-        },
-        () => {
-          setTimerState({
-            isRunning: false,
-            remainingTime: 0,
-            totalDuration: 0,
-          });
-        }
-      );
-    } else {
-      console.error("Chrome runtime API is not available.");
-    }
+  const endTimer = async () => {
+    await browserAPI.runtime.sendMessage({
+      action: "endTimer",
+    });
+
+    setTimerState({
+      isRunning: false,
+      remainingTime: 0,
+      totalDuration: 0,
+    });
   };
 
   const getProgressPercentage = (): number => {
@@ -211,16 +128,15 @@ const Timer: React.FC<TimerProps> = ({ settings, onUpdateSettings }) => {
     );
   };
 
+  // Rest of your Timer component JSX remains the same
   return (
     <div className="space-y-4">
-      {/* Timer Display */}
       <div className="relative pt-4">
         <div className="flex justify-center items-center">
           <div className="text-3xl font-mono dark:text-white">
             {formatTime(timerState.remainingTime)}
           </div>
         </div>
-        {/* Progress Bar */}
         <div className="w-full h-2 bg-gray-200 rounded-full mt-2 overflow-hidden">
           <div
             className="h-full bg-blue-500 transition-all duration-1000"
@@ -229,7 +145,6 @@ const Timer: React.FC<TimerProps> = ({ settings, onUpdateSettings }) => {
         </div>
       </div>
 
-      {/* Timer Controls */}
       <div className="flex flex-wrap gap-2 justify-center">
         {!timerState.isRunning && timerState.remainingTime === 0 && (
           <>
@@ -247,24 +162,14 @@ const Timer: React.FC<TimerProps> = ({ settings, onUpdateSettings }) => {
             </button>
           </>
         )}
-
         {timerState.isRunning && (
-          <>
-            <button
-              onClick={pauseTimer}
-              className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
-            >
-              Pause
-            </button>
-            <button
-              onClick={endTimer}
-              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-            >
-              End
-            </button>
-          </>
+          <button
+            onClick={pauseTimer}
+            className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+          >
+            Pause
+          </button>
         )}
-
         {!timerState.isRunning && timerState.remainingTime > 0 && (
           <button
             onClick={resumeTimer}
@@ -273,9 +178,15 @@ const Timer: React.FC<TimerProps> = ({ settings, onUpdateSettings }) => {
             Resume
           </button>
         )}
+        {timerState.remainingTime > 0 && (
+          <button
+            onClick={endTimer}
+            className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+          >
+            End
+          </button>
+        )}
       </div>
     </div>
   );
-};
-
-export default Timer;
+}
