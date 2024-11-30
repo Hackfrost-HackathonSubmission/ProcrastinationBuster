@@ -6,9 +6,8 @@
      "permissions": [
           "storage",
           "tabs",
-          "webRequest",
-          "alarms",
-          "notifications"
+          "notifications",
+          "alarms"
      ],
      "action": {
           "default_popup": "popup.html"

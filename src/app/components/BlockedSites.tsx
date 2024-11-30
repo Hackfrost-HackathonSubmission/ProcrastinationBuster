@@ -1,20 +1,17 @@
-"use client";
+import { useState } from "react";
 
-import { useState, useEffect } from "react";
+interface BlockedSitesProps {
+  sites: string[];
+  onUpdateSites: (sites: string[]) => Promise<void>;
+}
 
-export default function BlockedSites() {
-  const [sites, setSites] = useState<string[]>([]);
-  const [newSite, setNewSite] = useState("");
+export default function BlockedSites({
+  sites,
+  onUpdateSites,
+}: BlockedSitesProps) {
+  const [newSite, setNewSite] = useState<string>("");
 
-  useEffect(() => {
-    chrome.storage?.sync?.get(["blockedSites"], (data) => {
-      if (data.blockedSites) {
-        setSites(data.blockedSites);
-      }
-    });
-  }, []);
-
-  const addSite = () => {
+  const handleAddSite = async () => {
     if (!newSite) return;
 
     try {
@@ -22,54 +19,51 @@ export default function BlockedSites() {
         newSite.startsWith("http") ? newSite : `https://${newSite}`
       ).hostname;
 
-      const updatedSites = [...sites, hostname];
-      setSites(updatedSites);
-      chrome.storage?.sync?.set({ blockedSites: updatedSites });
+      if (!sites.includes(hostname)) {
+        await onUpdateSites([...sites, hostname]);
+      }
       setNewSite("");
-    } catch (e) {
-      alert("Please enter a valid website URL or domain");
-      console.log(e);
+    } catch (error) {
+      console.error("Invalid URL:", error);
     }
   };
 
-  const removeSite = (site: string) => {
-    const updatedSites = sites.filter((s) => s !== site);
-    setSites(updatedSites);
-    chrome.storage?.sync?.set({ blockedSites: updatedSites });
+  const handleRemoveSite = async (site: string) => {
+    await onUpdateSites(sites.filter((s) => s !== site));
   };
 
   return (
-    <div className="mt-6">
-      <h3 className="text-lg font-semibold mb-4">Blocked Sites</h3>
-
-      <div className="flex gap-2 mb-4">
+    <div>
+      <h2 className="text-lg font-semibold mb-2 dark:text-white">
+        Blocked Sites
+      </h2>
+      <div className="flex gap-2 mb-2">
         <input
           type="text"
           value={newSite}
           onChange={(e) => setNewSite(e.target.value)}
-          placeholder="Enter website (e.g., facebook.com)"
-          className="flex-1 px-3 py-2 border rounded focus:outline-none focus:border-blue-500"
+          placeholder="Enter website URL"
+          className="flex-1 px-3 py-2 border rounded-lg dark:bg-gray-700 dark:text-white dark:border-gray-600"
         />
         <button
-          onClick={addSite}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          onClick={handleAddSite}
+          className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors duration-200"
         >
           Add
         </button>
       </div>
-
       <ul className="space-y-2">
-        {sites.map((site, index) => (
+        {sites.map((site) => (
           <li
-            key={index}
-            className="flex justify-between items-center bg-gray-50 p-3 rounded"
+            key={site}
+            className="flex justify-between items-center p-2 bg-gray-100 dark:bg-gray-700 rounded-lg"
           >
-            <span>{site}</span>
+            <span className="dark:text-white">{site}</span>
             <button
-              onClick={() => removeSite(site)}
+              onClick={() => handleRemoveSite(site)}
               className="text-red-500 hover:text-red-600"
             >
-              Remove
+              ✕
             </button>
           </li>
         ))}
