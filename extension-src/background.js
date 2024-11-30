@@ -29,6 +29,20 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.action.setBadgeText({ text: "" });
 });
 
+// Clear all blocking rules function
+async function clearAllBlockingRules() {
+  try {
+    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+    if (existingRules.length > 0) {
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: existingRules.map((rule) => rule.id),
+      });
+    }
+  } catch (error) {
+    console.error("Error clearing blocking rules:", error);
+  }
+}
+
 // Timer Alarm Management
 function createTimerAlarm(minutes) {
   chrome.alarms.create("timer", {
@@ -96,11 +110,8 @@ async function endTimer() {
   clearTimerAlarm();
 
   try {
-    // First, explicitly clear all blocking rules
-    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-    await chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds: existingRules.map((rule) => rule.id),
-    });
+    // Clear all blocking rules
+    await clearAllBlockingRules();
 
     // Update stats if needed
     const sessionData = await chrome.storage.sync.get(["currentSession"]);
@@ -115,7 +126,6 @@ async function endTimer() {
     await chrome.storage.sync.set({
       currentSession: null,
       focusMode: false,
-      blockedSites: [], // Clear blocked sites
     });
 
     // Update UI
@@ -136,21 +146,19 @@ async function endTimer() {
 async function updateBlockingRules() {
   try {
     // First, clear all existing rules
-    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-    await chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds: existingRules.map((rule) => rule.id),
-    });
+    await clearAllBlockingRules();
 
     const data = await chrome.storage.sync.get([
       "isEnabled",
       "focusMode",
       "blockedSites",
-      "currentSession", // Add this to check if timer is running
+      "currentSession",
     ]);
 
     const { isEnabled, focusMode, blockedSites, currentSession } = data;
 
-    if (isEnabled && focusMode && blockedSites?.length && currentSession) {
+    // Only add rules if focus mode is active and extension is enabled
+    if (isEnabled && focusMode && blockedSites?.length) {
       const rules = blockedSites.map((site, index) => ({
         id: index + 1,
         priority: 1,
@@ -173,6 +181,11 @@ async function updateBlockingRules() {
   }
 }
 
+// Handle extension cleanup
+chrome.runtime.onSuspend.addListener(() => {
+  clearAllBlockingRules();
+});
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   switch (request.action) {
     case "startTimer":
@@ -181,6 +194,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       break;
     case "endTimer":
       endTimer();
+      sendResponse({ success: true });
+      break;
+    case "toggleFocusMode":
+      if (!request.enabled) {
+        clearAllBlockingRules();
+      }
       sendResponse({ success: true });
       break;
     case "getTimeRemaining":
