@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import BlockedSites from "./BlockedSites";
 import Timer from "./Timer";
+import SiteStats from "./SiteStats";
 import { Settings, StorageKey } from "@/types";
 
 const DEFAULT_SETTINGS: Settings = {
@@ -22,6 +23,10 @@ const DEFAULT_SETTINGS: Settings = {
       best: 0,
       lastDate: new Date().toISOString(),
     },
+  },
+  siteStats: {
+    dailyStats: [],
+    lastUpdate: new Date().toISOString(),
   },
 };
 
@@ -47,11 +52,14 @@ export default function Popup() {
               ...(result?.stats?.streak || {}),
             },
           },
+          siteStats: {
+            ...DEFAULT_SETTINGS.siteStats,
+            ...(result?.siteStats || {}),
+          },
         };
         setSettings(mergedSettings);
       } catch (error) {
         console.error("Failed to load settings:", error);
-        // If loading fails, keep using default settings
         setSettings(DEFAULT_SETTINGS);
       } finally {
         setIsLoading(false);
@@ -144,6 +152,13 @@ export default function Popup() {
 
         {/* Timer Component */}
         <Timer settings={settings} onUpdateSettings={updateSettings} />
+
+        {/* Site Stats Component */}
+        {settings.siteStats && settings.siteStats.dailyStats.length > 0 && (
+          <div className="mt-4">
+            <SiteStats siteStats={settings.siteStats.dailyStats} />
+          </div>
+        )}
 
         {/* Stats Display */}
         <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">

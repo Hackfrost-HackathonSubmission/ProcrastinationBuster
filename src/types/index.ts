@@ -6,7 +6,6 @@ export interface TimerSession {
   remainingTime: number;
 }
 
-
 export interface Streak {
   current: number;
   best: number;
@@ -21,6 +20,13 @@ export interface Stats {
   streak: Streak;
 }
 
+export interface SiteVisit {
+  url: string;
+  domain: string;
+  timeSpent: number;
+  lastVisit: string;
+}
+
 export interface Settings {
   isEnabled: boolean;
   focusMode: boolean;
@@ -29,6 +35,10 @@ export interface Settings {
   currentSession: TimerSession | null;
   blockedSites: string[];
   stats: Stats;
+  siteStats?: {
+    dailyStats: SiteVisit[];
+    lastUpdate: string;
+  };
 }
 
 export type StorageKey = keyof Settings;

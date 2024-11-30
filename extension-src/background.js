@@ -17,6 +17,95 @@ if (
   let remainingTime = 0;
   let isPaused = false;
   let activeRuleIds = new Set();
+  let activeTabId = null;
+  let lastActiveTime = Date.now();
+  let siteTracker = {};
+
+  async function updateSiteTime() {
+    if (!activeTabId) return;
+
+    const now = Date.now();
+    const timeSpent = Math.floor((now - lastActiveTime) / 1000);
+    lastActiveTime = now;
+
+    try {
+      const tab = await chrome.tabs.get(activeTabId);
+      if (!tab.url) return;
+
+      const domain = new URL(tab.url).hostname;
+
+      const { siteStats } = await chrome.storage.sync.get(["siteStats"]);
+      const today = new Date().toISOString().split("T")[0];
+
+      if (!siteStats || siteStats.lastUpdate !== today) {
+        // Reset stats for new day
+        await chrome.storage.sync.set({
+          siteStats: {
+            dailyStats: [],
+            lastUpdate: today,
+          },
+        });
+      }
+
+      const stats = siteStats?.dailyStats || [];
+      const siteIndex = stats.findIndex((s) => s.domain === domain);
+
+      if (siteIndex >= 0) {
+        stats[siteIndex].timeSpent += timeSpent;
+        stats[siteIndex].lastVisit = new Date().toISOString();
+      } else {
+        stats.push({
+          url: tab.url,
+          domain,
+          timeSpent,
+          lastVisit: new Date().toISOString(),
+        });
+      }
+
+      await chrome.storage.sync.set({
+        siteStats: {
+          dailyStats: stats,
+          lastUpdate: today,
+        },
+      });
+    } catch (error) {
+      console.error("Error updating site time:", error);
+    }
+  }
+
+  // Add these listeners to track tab changes
+  chrome.tabs.onActivated.addListener(async (activeInfo) => {
+    if (activeTabId) {
+      await updateSiteTime();
+    }
+    activeTabId = activeInfo.tabId;
+    lastActiveTime = Date.now();
+  });
+
+  chrome.windows.onFocusChanged.addListener(async (windowId) => {
+    if (windowId === chrome.windows.WINDOW_ID_NONE) {
+      if (activeTabId) {
+        await updateSiteTime();
+        activeTabId = null;
+      }
+    } else {
+      const [tab] = await chrome.tabs.query({ active: true, windowId });
+      activeTabId = tab?.id;
+      lastActiveTime = Date.now();
+    }
+  });
+
+  // Add visibility change handler
+  document.addEventListener("visibilitychange", async () => {
+    if (document.hidden && activeTabId) {
+      await updateSiteTime();
+    } else {
+      lastActiveTime = Date.now();
+    }
+  });
+
+  // Update site time periodically (every minute)
+  setInterval(updateSiteTime, 60000);
 
   // Initialize rules function
   async function initializeRules() {
