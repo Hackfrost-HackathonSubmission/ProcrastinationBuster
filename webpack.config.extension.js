@@ -50,7 +50,7 @@ module.exports = {
         { from: "extension-src/background.js", to: "background.js" },
         { from: "extension-src/popup.html", to: "popup.html" },
         { from: "extension-src/blocked.html", to: "blocked.html" },
-        { from: "extension-src/icon48.png", to: "icon48.png" }, // Added icon
+        { from: "extension-src/icon48.png", to: "icon48.png" },
         {
           from: "extension-src/rules.json",
           to: "rules.json",
