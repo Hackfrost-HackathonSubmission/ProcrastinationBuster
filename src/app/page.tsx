@@ -32,10 +32,10 @@ const Page = () => {
     const loadSettings = async () => {
       try {
         const result = (await chrome.storage.sync.get(null)) as Settings;
-        setSettings((prev) => ({
+        setSettings({
           ...DEFAULT_SETTINGS,
           ...result,
-        }));
+        });
       } catch (error) {
         console.error("Failed to load settings:", error);
       }
@@ -50,8 +50,8 @@ const Page = () => {
   ): Promise<void> => {
     try {
       await chrome.storage.sync.set({ [key]: value });
-      setSettings((prev) => ({
-        ...prev,
+      setSettings((currentSettings) => ({
+        ...currentSettings,
         [key]: value,
       }));
     } catch (error) {

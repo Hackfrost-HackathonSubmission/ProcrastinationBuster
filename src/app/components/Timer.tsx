@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Settings, StorageKey } from "@/types";
 
 interface TimerProps {
@@ -15,40 +15,7 @@ export default function Timer({ settings, onUpdateSettings }: TimerProps) {
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [isRunning, setIsRunning] = useState<boolean>(false);
 
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-
-    if (isRunning && timeLeft > 0) {
-      timer = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
-      }, 1000);
-    } else if (timeLeft === 0 && isRunning) {
-      handleTimerComplete();
-    }
-
-    return () => clearInterval(timer);
-  }, [isRunning, timeLeft]);
-
-  const startTimer = async () => {
-    const duration = settings.focusMode
-      ? settings.focusTimer
-      : settings.breakTimer;
-    setTimeLeft(duration * 60);
-    setIsRunning(true);
-
-    await onUpdateSettings("currentSession", {
-      startTime: Date.now(),
-      duration: duration * 60,
-      type: settings.focusMode ? "focus" : "break",
-    });
-  };
-
-  const stopTimer = async () => {
-    setIsRunning(false);
-    await onUpdateSettings("currentSession", null);
-  };
-
-  const handleTimerComplete = async () => {
+  const handleTimerComplete = useCallback(async () => {
     setIsRunning(false);
 
     if (settings.currentSession?.type === "focus") {
@@ -68,7 +35,6 @@ export default function Timer({ settings, onUpdateSettings }: TimerProps) {
 
     await onUpdateSettings("currentSession", null);
 
-    // Show notification
     chrome.notifications.create({
       type: "basic",
       iconUrl: "/icon.png",
@@ -80,6 +46,39 @@ export default function Timer({ settings, onUpdateSettings }: TimerProps) {
           ? "Great job! Take a break."
           : "Break time is over. Ready to focus?",
     });
+  }, [settings, onUpdateSettings]);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+
+    if (isRunning && timeLeft > 0) {
+      timer = setInterval(() => {
+        setTimeLeft((current) => current - 1);
+      }, 1000);
+    } else if (timeLeft === 0 && isRunning) {
+      handleTimerComplete();
+    }
+
+    return () => clearInterval(timer);
+  }, [isRunning, timeLeft, handleTimerComplete]);
+
+  const startTimer = async () => {
+    const duration = settings.focusMode
+      ? settings.focusTimer
+      : settings.breakTimer;
+    setTimeLeft(duration * 60);
+    setIsRunning(true);
+
+    await onUpdateSettings("currentSession", {
+      startTime: Date.now(),
+      duration: duration * 60,
+      type: settings.focusMode ? "focus" : "break",
+    });
+  };
+
+  const stopTimer = async () => {
+    setIsRunning(false);
+    await onUpdateSettings("currentSession", null);
   };
 
   const formatTime = (seconds: number): string => {
