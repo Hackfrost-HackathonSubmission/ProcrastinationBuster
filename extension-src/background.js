@@ -18,7 +18,46 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-// Track active tab changes
+// Add webRequest listener to block sites
+chrome.webRequest.onBeforeRequest.addListener(
+  (details) => {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get(
+        ["isEnabled", "focusMode", "blockedSites"],
+        (data) => {
+          if (!data.isEnabled || !data.focusMode) {
+            resolve({ cancel: false });
+            return;
+          }
+
+          try {
+            const url = new URL(details.url);
+            const hostname = url.hostname.replace("www.", "");
+
+            if (data.blockedSites.some((site) => hostname.includes(site))) {
+              updateStats("distractions");
+              resolve({
+                redirectUrl: chrome.runtime.getURL("blocked.html"),
+              });
+            } else {
+              resolve({ cancel: false });
+            }
+          } catch (error) {
+            console.error("Error checking URL:", error);
+            resolve({ cancel: false });
+          }
+        }
+      );
+    });
+  },
+  {
+    urls: ["<all_urls>"],
+    types: ["main_frame", "sub_frame"],
+  },
+  ["blocking"]
+);
+
+// Track active tab changes for stats
 chrome.tabs.onActivated.addListener((activeInfo) => {
   chrome.tabs.get(activeInfo.tabId, (tab) => {
     if (tab.url) checkUrl(tab.url);
@@ -36,14 +75,8 @@ function checkUrl(url) {
       if (!data.isEnabled || !data.focusMode) return;
 
       try {
-        const hostname = new URL(url).hostname;
-        if (
-          data.blockedSites.includes(hostname) ||
-          data.blockedSites.includes(hostname.replace("www.", ""))
-        ) {
-          chrome.tabs.update({
-            url: "https://www.google.com",
-          });
+        const hostname = new URL(url).hostname.replace("www.", "");
+        if (data.blockedSites.some((site) => hostname.includes(site))) {
           updateStats("distractions");
         }
       } catch (error) {
@@ -53,6 +86,7 @@ function checkUrl(url) {
   );
 }
 
+// Rest of the timer and stats functions remain the same
 function startTimer(minutes) {
   remainingTime = minutes * 60;
 

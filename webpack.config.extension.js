@@ -9,7 +9,7 @@ module.exports = {
   output: {
     path: path.resolve(__dirname, "extension"),
     filename: "[name].bundle.js",
-    clean: false, // Important! Don't clean the output directory
+    clean: true, // Clean the output directory before emit
   },
   module: {
     rules: [
@@ -32,20 +32,18 @@ module.exports = {
         {
           from: "extension-src/manifest.json",
           to: "manifest.json",
-          force: false, // Don't overwrite if exists
-          noErrorOnMissing: true,
         },
         {
           from: "extension-src/background.js",
           to: "background.js",
-          force: false,
-          noErrorOnMissing: true,
         },
         {
           from: "extension-src/popup.html",
           to: "popup.html",
-          force: false,
-          noErrorOnMissing: true,
+        },
+        {
+          from: "extension-src/blocked.html",
+          to: "blocked.html",
         },
       ],
     }),
