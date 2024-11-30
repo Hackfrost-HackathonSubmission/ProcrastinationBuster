@@ -45,7 +45,7 @@ async function updateBlockingRules(blockedSites) {
       action: {
         type: "redirect",
         redirect: {
-          url: chrome.runtime.getURL("blocked.html"),
+          extensionPath: "/blocked.html",
         },
       },
       condition: {
@@ -241,7 +241,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true; // Required for async response
 });
 
-// Alarm handling for periodic checks
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "checkSession") {
     chrome.storage.sync.get(["currentSession"], (data) => {

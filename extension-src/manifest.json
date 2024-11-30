@@ -10,16 +10,14 @@
           "alarms",
           "declarativeNetRequest"
      ],
+     "action": {
+          "default_popup": "popup.html"
+     },
+     "background": {
+          "service_worker": "background.js",
+          "type": "module"
+     },
      "host_permissions": [
           "<all_urls>"
-     ],
-     "declarative_net_request": {
-          "rule_resources": [
-               {
-                    "id": "ruleset_1",
-                    "enabled": true,
-                    "path": "rules.json"
-               }
-          ]
-     }
+     ]
 }
