@@ -8,7 +8,7 @@ module.exports = {
     background: "./extension-src/background.js",
   },
   output: {
-    path: path.resolve(__dirname, "extension"),
+    path: path.resolve(__dirname, "extension"), // This is where all built files will go
     filename: "[name].bundle.js",
     clean: true,
   },
@@ -50,6 +50,7 @@ module.exports = {
         { from: "extension-src/background.js", to: "background.js" },
         { from: "extension-src/popup.html", to: "popup.html" },
         { from: "extension-src/blocked.html", to: "blocked.html" },
+        { from: "extension-src/icon48.png", to: "icon48.png" }, // Added icon
         {
           from: "extension-src/rules.json",
           to: "rules.json",
