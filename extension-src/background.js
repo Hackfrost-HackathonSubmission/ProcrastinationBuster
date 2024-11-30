@@ -257,13 +257,11 @@ if (
 
       const { isEnabled, focusMode, blockedSites, currentSession } = data;
 
-      console.log("Current state:", {
+      console.log("Updating blocking rules:", {
         isEnabled,
         focusMode,
-        hasBlockedSites: blockedSites?.length > 0,
-        hasCurrentSession: !!currentSession,
-        isPaused: currentSession?.isPaused,
-        isBreak: currentSession?.isBreak,
+        blockedSites,
+        currentSession,
       });
 
       if (
@@ -274,37 +272,34 @@ if (
         currentSession.isPaused ||
         currentSession.isBreak
       ) {
-        console.log("Conditions not met for blocking, clearing rules");
+        console.log("Not creating blocking rules due to conditions not met");
         await clearAllBlockingRules();
         return;
       }
 
-      const rules = blockedSites.map((site, index) => {
-        // Remove protocol and www if present
-        const cleanedSite = site.replace(/^https?:\/\/(www\.)?/, "");
+      const rules = blockedSites.map((site, index) => ({
+        id: index + 1000,
+        priority: 1,
+        action: {
+          type: "redirect",
+          redirect: { extensionPath: "/blocked.html" },
+        },
+        condition: {
+          urlFilter: site.replace(/^https?:\/\/(www\.)?/, "*://"),
+          resourceTypes: ["main_frame", "sub_frame"],
+        },
+      }));
 
-        return {
-          id: index + 1000,
-          priority: 1,
-          action: {
-            type: "redirect",
-            redirect: { extensionPath: "/blocked.html" },
-          },
-          condition: {
-            urlFilter: `*://*${cleanedSite}/*`, // Updated URL filtering pattern
-            resourceTypes: ["main_frame"],
-          },
-        };
+      console.log("Adding blocking rules:", rules);
+
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: Array.from(activeRuleIds),
+        addRules: rules,
       });
 
       activeRuleIds = new Set(rules.map((rule) => rule.id));
-      await chrome.declarativeNetRequest.updateDynamicRules({
-        removeRuleIds: (
-          await chrome.declarativeNetRequest.getDynamicRules()
-        ).map((rule) => rule.id),
-        addRules: rules,
-      });
-      console.log("Blocking rules updated successfully:", rules);
+
+      console.log("Rules updated successfully");
     } catch (error) {
       console.error("Error updating blocking rules:", error);
       await clearAllBlockingRules();

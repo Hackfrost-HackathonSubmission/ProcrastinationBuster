@@ -26,19 +26,22 @@ export default function Timer({ settings, onUpdateSettings }: TimerProps) {
   });
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (timerState.isRunning && timerState.remainingTime > 0) {
-        setTimerState((prev) => ({
-          ...prev,
-          remainingTime: prev.remainingTime - 1,
-        }));
-      } else if (timerState.isRunning && timerState.remainingTime === 0) {
-        endTimer();
-      }
-    }, 1000);
+    const loadTimerState = async () => {
+      const result = await browserAPI.runtime.sendMessage({
+        action: "getTimeRemaining",
+      });
 
-    return () => clearInterval(interval);
-  }, [timerState.isRunning, timerState.remainingTime]);
+      if (result) {
+        setTimerState({
+          isRunning: result.isRunning ?? false,
+          remainingTime: result.remainingTime ?? 0,
+          totalDuration: result.totalDuration ?? 0,
+        });
+      }
+    };
+
+    loadTimerState();
+  }, []);
 
   const formatTime = (totalSeconds: number): string => {
     const minutes = Math.floor(totalSeconds / 60);
@@ -127,8 +130,6 @@ export default function Timer({ settings, onUpdateSettings }: TimerProps) {
       100
     );
   };
-
-  // Rest of your Timer component JSX remains the same
   return (
     <div className="space-y-4">
       <div className="relative pt-4">
