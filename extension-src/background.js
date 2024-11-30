@@ -70,15 +70,9 @@ function startTimer(minutes, isBreak = false) {
     },
   });
 
-  // Enable focus mode if it's not a break
-  if (!isBreak) {
-    chrome.storage.sync.set({ focusMode: true }, updateBlockingRules);
-  }
-
   // Update badge
   updateBadge();
 }
-
 // Update badge every minute
 function updateBadge() {
   chrome.storage.sync.get(["currentSession"], (data) => {
