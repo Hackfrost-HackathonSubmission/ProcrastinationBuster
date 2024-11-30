@@ -46,6 +46,7 @@ export default function Settings() {
       setNewSite("");
     } catch (err) {
       alert("Please enter a valid website URL");
+      console.log(err);
     }
   };
 

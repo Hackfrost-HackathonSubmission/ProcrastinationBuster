@@ -28,6 +28,7 @@ export default function BlockedSites() {
       setNewSite("");
     } catch (e) {
       alert("Please enter a valid website URL or domain");
+      console.log(e);
     }
   };
 
