@@ -1,23 +1,24 @@
 {
-     "compilerOptions": {
-       "target": "ES2017",
-       "lib": ["dom", "dom.iterable", "esnext"],
-       "allowJs": true,
-       "skipLibCheck": true,
-       "strict": true,
-       "esModuleInterop": true,
-       "module": "esnext",
-       "moduleResolution": "node",
-       "resolveJsonModule": true,
-       "isolatedModules": true,
-       "jsx": "react-jsx",
-       "incremental": true,
-       "outDir": "./extension",
-       "noEmit": false,
-       "paths": {
-         "@/*": ["./src/*"]
-       }
-     },
-     "include": ["extension-src/**/*", "src/components/**/*"],
-     "exclude": ["node_modules", ".next", "src/app"]
-   }
+  "compilerOptions": {
+    "target": "es6",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": false,
+    "esModuleInterop": true,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react",
+    "incremental": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["extension-src/**/*.ts", "extension-src/**/*.tsx"],
+  "exclude": ["node_modules"]
+}
