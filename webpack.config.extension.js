@@ -3,7 +3,6 @@ const CopyPlugin = require("copy-webpack-plugin");
 
 module.exports = {
   mode: process.env.NODE_ENV === "development" ? "development" : "production",
-  devtool: "source-map",
   entry: {
     popup: "./extension-src/popup.tsx",
     background: "./extension-src/background.js",
@@ -18,22 +17,23 @@ module.exports = {
       {
         test: /\.(ts|tsx)$/,
         exclude: /node_modules/,
-        use: [
-          {
-            loader: "babel-loader",
-            options: {
-              presets: [
+        use: {
+          loader: "babel-loader",
+          options: {
+            presets: [
+              [
                 "@babel/preset-env",
-                "@babel/preset-react",
-                "@babel/preset-typescript",
+                { targets: { chrome: "58", firefox: "57" } },
               ],
-            },
+              ["@babel/preset-react", { runtime: "automatic" }],
+              "@babel/preset-typescript",
+            ],
           },
-        ],
+        },
       },
       {
         test: /\.css$/,
-        use: ["style-loader", "css-loader", "postcss-loader"],
+        use: ["style-loader", "css-loader"],
       },
     ],
   },
@@ -46,22 +46,10 @@ module.exports = {
   plugins: [
     new CopyPlugin({
       patterns: [
-        {
-          from: "extension-src/manifest.json",
-          to: "manifest.json",
-        },
-        {
-          from: "extension-src/background.js",
-          to: "background.js",
-        },
-        {
-          from: "extension-src/popup.html",
-          to: "popup.html",
-        },
-        {
-          from: "extension-src/blocked.html",
-          to: "blocked.html",
-        },
+        { from: "extension-src/manifest.json", to: "manifest.json" },
+        { from: "extension-src/background.js", to: "background.js" },
+        { from: "extension-src/popup.html", to: "popup.html" },
+        { from: "extension-src/blocked.html", to: "blocked.html" },
         {
           from: "extension-src/rules.json",
           to: "rules.json",
