@@ -25,7 +25,6 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
   });
 });
 
-// Track URL changes in active tab
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url) checkUrl(changeInfo.url);
 });
@@ -36,15 +35,19 @@ function checkUrl(url) {
     (data) => {
       if (!data.isEnabled || !data.focusMode) return;
 
-      const hostname = new URL(url).hostname;
-      if (data.blockedSites.includes(hostname)) {
-        // Block access to distracting site
-        chrome.tabs.update({
-          url: chrome.runtime.getURL("blocked.html"),
-        });
-
-        // Record distraction attempt
-        updateStats("distractions");
+      try {
+        const hostname = new URL(url).hostname;
+        if (
+          data.blockedSites.includes(hostname) ||
+          data.blockedSites.includes(hostname.replace("www.", ""))
+        ) {
+          chrome.tabs.update({
+            url: "https://www.google.com",
+          });
+          updateStats("distractions");
+        }
+      } catch (error) {
+        console.error("Error checking URL:", error);
       }
     }
   );
@@ -64,8 +67,6 @@ function startTimer(minutes) {
 
   timer = setInterval(() => {
     remainingTime--;
-
-    // Update badge with remaining time
     chrome.action.setBadgeText({
       text: Math.ceil(remainingTime / 60).toString(),
     });
@@ -96,13 +97,12 @@ function updateStats(type) {
     const stats = data.stats;
 
     if (stats.lastUpdate.split("T")[0] !== today) {
-      // Reset daily stats
       stats.dailyFocusTime = 0;
       stats.distractions = 0;
     }
 
     if (type === "focusTime") {
-      stats.dailyFocusTime += 25; // Add completed session time
+      stats.dailyFocusTime += 25;
     } else if (type === "distractions") {
       stats.distractions += 1;
     }
