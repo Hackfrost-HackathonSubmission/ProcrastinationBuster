@@ -92,9 +92,14 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
-// End timer
-function endTimer() {
+async function endTimer() {
   clearTimerAlarm();
+
+  // First, explicitly clear all blocking rules
+  const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+  await chrome.declarativeNetRequest.updateDynamicRules({
+    removeRuleIds: existingRules.map((rule) => rule.id),
+  });
 
   chrome.storage.sync.get(["currentSession"], (data) => {
     if (data.currentSession && !data.currentSession.isBreak) {
@@ -108,16 +113,15 @@ function endTimer() {
   });
 
   // Clear session and focus mode
-  chrome.storage.sync.set(
-    {
-      currentSession: null,
-      focusMode: false,
-    },
-    () => {
-      updateBlockingRules();
-      chrome.action.setBadgeText({ text: "" });
-    }
-  );
+  await chrome.storage.sync.set({
+    currentSession: null,
+    focusMode: false,
+    // Also explicitly clear blocked sites when timer ends
+    blockedSites: [],
+  });
+
+  // Update UI
+  chrome.action.setBadgeText({ text: "" });
 
   // Show notification
   chrome.notifications.create({

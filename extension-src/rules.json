@@ -1,17 +1,18 @@
-{
-     "rules": [
-          {
-               "id": 1,
-               "priority": 1,
-               "action": {
-                    "type": "block"
-               },
-               "condition": {
-                    "urlFilter": "*",
-                    "resourceTypes": [
-                         "main_frame"
-                    ]
+[
+     {
+          "id": 1,
+          "priority": 1,
+          "action": {
+               "type": "redirect",
+               "redirect": {
+                    "extensionPath": "/blocked.html"
                }
+          },
+          "condition": {
+               "urlFilter": "*",
+               "resourceTypes": [
+                    "main_frame"
+               ]
           }
-     ]
-}
+     }
+]
