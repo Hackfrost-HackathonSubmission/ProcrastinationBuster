@@ -1,4 +1,3 @@
-// src/components/Timer.tsx
 import React, { useEffect, useState } from "react";
 import { Settings, StorageKey } from "@/types";
 
@@ -24,35 +23,46 @@ const Timer: React.FC<TimerProps> = ({ settings, onUpdateSettings }) => {
   });
 
   useEffect(() => {
-    // Check timer state when component mounts
-    chrome.runtime.sendMessage({ action: "getTimeRemaining" }, (response) => {
-      if (response.remainingTime > 0) {
-        setTimerState((prev) => ({
-          ...prev,
-          isRunning: true,
-          remainingTime: Math.round(response.remainingTime),
-          totalDuration: Math.round(
-            response.totalDuration || response.remainingTime
-          ),
-        }));
-      }
-    });
-
-    // Set up interval to update timer display
-    const intervalId = setInterval(() => {
+    if (
+      typeof chrome !== "undefined" &&
+      chrome.runtime &&
+      chrome.runtime.sendMessage
+    ) {
+      // Check timer state when component mounts
       chrome.runtime.sendMessage({ action: "getTimeRemaining" }, (response) => {
-        if (response.remainingTime >= 0) {
+        if (response.remainingTime > 0) {
           setTimerState((prev) => ({
             ...prev,
+            isRunning: true,
             remainingTime: Math.round(response.remainingTime),
-            isRunning: response.isRunning,
+            totalDuration: Math.round(
+              response.totalDuration || response.remainingTime
+            ),
           }));
         }
       });
-    }, 1000);
 
-    // Cleanup interval on unmount
-    return () => clearInterval(intervalId);
+      // Set up interval to update timer display
+      const intervalId = setInterval(() => {
+        chrome.runtime.sendMessage(
+          { action: "getTimeRemaining" },
+          (response) => {
+            if (response.remainingTime >= 0) {
+              setTimerState((prev) => ({
+                ...prev,
+                remainingTime: Math.round(response.remainingTime),
+                isRunning: response.isRunning,
+              }));
+            }
+          }
+        );
+      }, 1000);
+
+      // Cleanup interval on unmount
+      return () => clearInterval(intervalId);
+    } else {
+      console.error("Chrome runtime API is not available.");
+    }
   }, []);
 
   const formatTime = (seconds: number): string => {
@@ -63,92 +73,132 @@ const Timer: React.FC<TimerProps> = ({ settings, onUpdateSettings }) => {
   };
 
   const startFocusSession = async () => {
-    const minutes = settings.focusTimer;
-    chrome.runtime.sendMessage(
-      {
-        action: "startTimer",
-        minutes,
-        isBreak: false,
-      },
-      () => {
-        setTimerState({
-          isRunning: true,
-          remainingTime: minutes * 60,
-          totalDuration: minutes * 60,
-        });
+    if (
+      typeof chrome !== "undefined" &&
+      chrome.runtime &&
+      chrome.runtime.sendMessage
+    ) {
+      const minutes = settings.focusTimer;
+      chrome.runtime.sendMessage(
+        {
+          action: "startTimer",
+          minutes,
+          isBreak: false,
+        },
+        () => {
+          setTimerState({
+            isRunning: true,
+            remainingTime: minutes * 60,
+            totalDuration: minutes * 60,
+          });
 
-        // Enable focus mode when starting a focus session
-        if (!settings.focusMode) {
-          onUpdateSettings("focusMode", true);
+          // Enable focus mode when starting a focus session
+          if (!settings.focusMode) {
+            onUpdateSettings("focusMode", true);
+          }
         }
-      }
-    );
+      );
+    } else {
+      console.error("Chrome runtime API is not available.");
+    }
   };
 
   const startBreakSession = async () => {
-    const minutes = settings.breakTimer;
-    chrome.runtime.sendMessage(
-      {
-        action: "startTimer",
-        minutes,
-        isBreak: true,
-      },
-      () => {
-        setTimerState({
-          isRunning: true,
-          remainingTime: minutes * 60,
-          totalDuration: minutes * 60,
-        });
+    if (
+      typeof chrome !== "undefined" &&
+      chrome.runtime &&
+      chrome.runtime.sendMessage
+    ) {
+      const minutes = settings.breakTimer;
+      chrome.runtime.sendMessage(
+        {
+          action: "startTimer",
+          minutes,
+          isBreak: true,
+        },
+        () => {
+          setTimerState({
+            isRunning: true,
+            remainingTime: minutes * 60,
+            totalDuration: minutes * 60,
+          });
 
-        // Disable focus mode during break
-        if (settings.focusMode) {
-          onUpdateSettings("focusMode", false);
+          // Disable focus mode during break
+          if (settings.focusMode) {
+            onUpdateSettings("focusMode", false);
+          }
         }
-      }
-    );
+      );
+    } else {
+      console.error("Chrome runtime API is not available.");
+    }
   };
 
   const pauseTimer = () => {
-    chrome.runtime.sendMessage(
-      {
-        action: "pauseTimer",
-      },
-      () => {
-        setTimerState((prev) => ({
-          ...prev,
-          isRunning: false,
-        }));
-      }
-    );
+    if (
+      typeof chrome !== "undefined" &&
+      chrome.runtime &&
+      chrome.runtime.sendMessage
+    ) {
+      chrome.runtime.sendMessage(
+        {
+          action: "pauseTimer",
+        },
+        () => {
+          setTimerState((prev) => ({
+            ...prev,
+            isRunning: false,
+          }));
+        }
+      );
+    } else {
+      console.error("Chrome runtime API is not available.");
+    }
   };
 
   const resumeTimer = () => {
-    chrome.runtime.sendMessage(
-      {
-        action: "resumeTimer",
-      },
-      () => {
-        setTimerState((prev) => ({
-          ...prev,
-          isRunning: true,
-        }));
-      }
-    );
+    if (
+      typeof chrome !== "undefined" &&
+      chrome.runtime &&
+      chrome.runtime.sendMessage
+    ) {
+      chrome.runtime.sendMessage(
+        {
+          action: "resumeTimer",
+        },
+        () => {
+          setTimerState((prev) => ({
+            ...prev,
+            isRunning: true,
+          }));
+        }
+      );
+    } else {
+      console.error("Chrome runtime API is not available.");
+    }
   };
 
   const endTimer = () => {
-    chrome.runtime.sendMessage(
-      {
-        action: "endTimer",
-      },
-      () => {
-        setTimerState({
-          isRunning: false,
-          remainingTime: 0,
-          totalDuration: 0,
-        });
-      }
-    );
+    if (
+      typeof chrome !== "undefined" &&
+      chrome.runtime &&
+      chrome.runtime.sendMessage
+    ) {
+      chrome.runtime.sendMessage(
+        {
+          action: "endTimer",
+        },
+        () => {
+          setTimerState({
+            isRunning: false,
+            remainingTime: 0,
+            totalDuration: 0,
+          });
+        }
+      );
+    } else {
+      console.error("Chrome runtime API is not available.");
+    }
   };
 
   const getProgressPercentage = (): number => {

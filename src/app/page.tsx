@@ -30,14 +30,22 @@ const Page = () => {
 
   useEffect(() => {
     const loadSettings = async () => {
-      try {
-        const result = (await chrome.storage.sync.get(null)) as Settings;
-        setSettings({
-          ...DEFAULT_SETTINGS,
-          ...result,
-        });
-      } catch (error) {
-        console.error("Failed to load settings:", error);
+      if (
+        typeof chrome !== "undefined" &&
+        chrome.storage &&
+        chrome.storage.sync
+      ) {
+        try {
+          const result = (await chrome.storage.sync.get(null)) as Settings;
+          setSettings({
+            ...DEFAULT_SETTINGS,
+            ...result,
+          });
+        } catch (error) {
+          console.error("Failed to load settings:", error);
+        }
+      } else {
+        console.error("Chrome storage API is not available.");
       }
     };
 
@@ -48,14 +56,22 @@ const Page = () => {
     key: K,
     value: Settings[K]
   ): Promise<void> => {
-    try {
-      await chrome.storage.sync.set({ [key]: value });
-      setSettings((currentSettings) => ({
-        ...currentSettings,
-        [key]: value,
-      }));
-    } catch (error) {
-      console.error(`Failed to update ${key}:`, error);
+    if (
+      typeof chrome !== "undefined" &&
+      chrome.storage &&
+      chrome.storage.sync
+    ) {
+      try {
+        await chrome.storage.sync.set({ [key]: value });
+        setSettings((currentSettings) => ({
+          ...currentSettings,
+          [key]: value,
+        }));
+      } catch (error) {
+        console.error(`Failed to update ${key}:`, error);
+      }
+    } else {
+      console.error("Chrome storage API is not available.");
     }
   };
 
