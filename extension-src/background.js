@@ -95,61 +95,62 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 async function endTimer() {
   clearTimerAlarm();
 
-  // First, explicitly clear all blocking rules
-  const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-  await chrome.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: existingRules.map((rule) => rule.id),
-  });
-
-  chrome.storage.sync.get(["currentSession"], (data) => {
-    if (data.currentSession && !data.currentSession.isBreak) {
-      // Update stats
-      chrome.storage.sync.get(["stats"], (data) => {
-        const stats = data.stats || {};
-        stats.dailyFocusTime += data.currentSession.duration;
-        chrome.storage.sync.set({ stats });
-      });
-    }
-  });
-
-  // Clear session and focus mode
-  await chrome.storage.sync.set({
-    currentSession: null,
-    focusMode: false,
-    // Also explicitly clear blocked sites when timer ends
-    blockedSites: [],
-  });
-
-  // Update UI
-  chrome.action.setBadgeText({ text: "" });
-
-  // Show notification
-  chrome.notifications.create({
-    type: "basic",
-    iconUrl: "icon.png",
-    title: "Timer Complete!",
-    message: "Great job! Take a break or start another session.",
-  });
-}
-
-// Site blocking
-async function updateBlockingRules() {
   try {
-    const data = await chrome.storage.sync.get([
-      "isEnabled",
-      "focusMode",
-      "blockedSites",
-    ]);
-    const { isEnabled, focusMode, blockedSites } = data;
-
-    // Remove existing rules
+    // First, explicitly clear all blocking rules
     const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
     await chrome.declarativeNetRequest.updateDynamicRules({
       removeRuleIds: existingRules.map((rule) => rule.id),
     });
 
-    // Add new rules if enabled and in focus mode
-    if (isEnabled && focusMode && blockedSites?.length) {
+    // Update stats if needed
+    const sessionData = await chrome.storage.sync.get(["currentSession"]);
+    if (sessionData.currentSession && !sessionData.currentSession.isBreak) {
+      const statsData = await chrome.storage.sync.get(["stats"]);
+      const stats = statsData.stats || {};
+      stats.dailyFocusTime += sessionData.currentSession.duration;
+      await chrome.storage.sync.set({ stats });
+    }
+
+    // Clear session and focus mode
+    await chrome.storage.sync.set({
+      currentSession: null,
+      focusMode: false,
+      blockedSites: [], // Clear blocked sites
+    });
+
+    // Update UI
+    await chrome.action.setBadgeText({ text: "" });
+
+    // Show notification
+    chrome.notifications.create({
+      type: "basic",
+      iconUrl: "icon.png",
+      title: "Timer Complete!",
+      message: "Great job! Take a break or start another session.",
+    });
+  } catch (error) {
+    console.error("Error in endTimer:", error);
+  }
+}
+
+async function updateBlockingRules() {
+  try {
+    // First, clear all existing rules
+    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: existingRules.map((rule) => rule.id),
+    });
+
+    const data = await chrome.storage.sync.get([
+      "isEnabled",
+      "focusMode",
+      "blockedSites",
+      "currentSession", // Add this to check if timer is running
+    ]);
+
+    const { isEnabled, focusMode, blockedSites, currentSession } = data;
+
+    if (isEnabled && focusMode && blockedSites?.length && currentSession) {
       const rules = blockedSites.map((site, index) => ({
         id: index + 1,
         priority: 1,
@@ -158,7 +159,7 @@ async function updateBlockingRules() {
           redirect: { extensionPath: "/blocked.html" },
         },
         condition: {
-          urlFilter: "*://*." + site.replace(/^https?:\/\/(www\.)?/, ""),
+          urlFilter: `*://*${site.replace(/^https?:\/\/(www\.)?/, "")}/*`,
           resourceTypes: ["main_frame"],
         },
       }));
@@ -172,7 +173,6 @@ async function updateBlockingRules() {
   }
 }
 
-// Message handling
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   switch (request.action) {
     case "startTimer":
