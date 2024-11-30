@@ -1,6 +1,9 @@
 export interface TimerSession {
   startTime: number;
   duration: number;
+  isBreak: boolean;
+  isPaused: boolean;
+  remainingTime: number;
 }
 
 export interface Streak {

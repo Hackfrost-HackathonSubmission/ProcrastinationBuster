@@ -1,5 +1,3 @@
-// src/utils/browserAPI.ts
-
 import { Settings, StorageKey } from "@/types";
 
 interface ChromeMessage {

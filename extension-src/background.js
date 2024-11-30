@@ -76,6 +76,7 @@ async function startTimer(minutes, isBreak = false) {
 
   if (!isBreak) {
     await chrome.storage.sync.set({ focusMode: true });
+    await updateBlockingRules();
   } else {
     await chrome.storage.sync.set({ focusMode: false });
     await clearAllBlockingRules();
@@ -106,6 +107,7 @@ async function pauseTimer() {
     });
   }
 
+  // Clear blocking rules when timer is paused
   await clearAllBlockingRules();
 }
 
@@ -156,6 +158,8 @@ function updateBadge() {
       const displayText = `${minutes}:${seconds.toString().padStart(2, "0")}`;
 
       chrome.action.setBadgeText({ text: displayText });
+    } else {
+      chrome.action.setBadgeText({ text: "" });
     }
   });
 }
@@ -174,6 +178,7 @@ async function endTimer() {
   clearTimerAlarm();
 
   try {
+    // Clear blocking rules first
     await clearAllBlockingRules();
 
     const sessionData = await chrome.storage.sync.get(["currentSession"]);
@@ -184,11 +189,13 @@ async function endTimer() {
       await chrome.storage.sync.set({ stats });
     }
 
+    // Set focus mode to false and clear session
     await chrome.storage.sync.set({
       currentSession: null,
       focusMode: false,
     });
 
+    // Clear badge text
     await chrome.action.setBadgeText({ text: "" });
 
     chrome.notifications.create({
@@ -205,6 +212,7 @@ async function endTimer() {
 
 async function updateBlockingRules() {
   try {
+    // Always clear existing rules first
     await clearAllBlockingRules();
 
     const data = await chrome.storage.sync.get([
@@ -216,36 +224,40 @@ async function updateBlockingRules() {
 
     const { isEnabled, focusMode, blockedSites, currentSession } = data;
 
+    // If any of these conditions are false, we should not add new blocking rules
     if (
-      isEnabled &&
-      focusMode &&
-      blockedSites?.length &&
-      currentSession &&
-      !currentSession.isPaused &&
-      !currentSession.isBreak
+      !isEnabled ||
+      !focusMode ||
+      !blockedSites?.length ||
+      !currentSession ||
+      currentSession.isPaused ||
+      currentSession.isBreak
     ) {
-      const rules = blockedSites.map((site, index) => ({
-        id: index + 1,
-        priority: 1,
-        action: {
-          type: "redirect",
-          redirect: { extensionPath: "/blocked.html" },
-        },
-        condition: {
-          urlFilter: `*://*${site.replace(/^https?:\/\/(www\.)?/, "")}/*`,
-          resourceTypes: ["main_frame"],
-        },
-      }));
-
-      await chrome.declarativeNetRequest.updateDynamicRules({
-        addRules: rules,
-      });
+      return; // Exit without adding new rules
     }
+
+    const rules = blockedSites.map((site, index) => ({
+      id: index + 1,
+      priority: 1,
+      action: {
+        type: "redirect",
+        redirect: { extensionPath: "/blocked.html" },
+      },
+      condition: {
+        urlFilter: `*://*${site.replace(/^https?:\/\/(www\.)?/, "")}/*`,
+        resourceTypes: ["main_frame"],
+      },
+    }));
+
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      addRules: rules,
+    });
   } catch (error) {
     console.error("Error updating blocking rules:", error);
   }
 }
 
+// Clear rules when extension is suspended
 chrome.runtime.onSuspend.addListener(() => {
   clearAllBlockingRules();
 });
@@ -303,14 +315,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-chrome.storage.onChanged.addListener((changes, namespace) => {
-  if (
-    namespace === "sync" &&
-    (changes.currentSession ||
+// Listen for changes in storage and update blocking rules accordingly
+chrome.storage.onChanged.addListener(async (changes, namespace) => {
+  if (namespace === "sync") {
+    // If blockedSites changed and is now empty, clear all rules
+    if (
+      changes.blockedSites &&
+      (!changes.blockedSites.newValue ||
+        changes.blockedSites.newValue.length === 0)
+    ) {
+      await clearAllBlockingRules();
+    }
+
+    // Update rules if relevant settings changed
+    if (
+      changes.currentSession ||
       changes.focusMode ||
       changes.blockedSites ||
-      changes.isEnabled)
-  ) {
-    updateBlockingRules();
+      changes.isEnabled
+    ) {
+      await updateBlockingRules();
+    }
   }
 });
