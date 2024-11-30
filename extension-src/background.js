@@ -4,6 +4,12 @@ let isPaused = false;
 let activeTabId = null;
 let activeRuleIds = new Set();
 let lastActiveTime = Date.now();
+let screenTimeData = {
+  date: new Date().toISOString().split("T")[0],
+  totalTime: 0,
+  sites: {},
+  focusSessionTime: 0,
+};
 
 // Service Worker setup
 self.oninstall = (event) => {
@@ -157,6 +163,119 @@ async function updateSiteTime() {
     });
   } catch (error) {
     console.error("Error updating site time:", error);
+  }
+}
+
+// Enhanced screen time tracking functions
+async function updateScreenTime() {
+  if (!activeTabId) return;
+
+  const now = Date.now();
+  const elapsedSeconds = Math.floor((now - lastActiveTime) / 1000);
+
+  try {
+    const tab = await chrome.tabs.get(activeTabId);
+    if (!tab.url) return;
+
+    const hostname = new URL(tab.url).hostname;
+    const today = new Date().toISOString().split("T")[0];
+
+    // Reset data if it's a new day
+    if (screenTimeData.date !== today) {
+      await archiveScreenTimeData();
+      screenTimeData = {
+        date: today,
+        totalTime: 0,
+        sites: {},
+        focusSessionTime: 0,
+      };
+    }
+
+    // Update site-specific data
+    if (!screenTimeData.sites[hostname]) {
+      screenTimeData.sites[hostname] = {
+        url: tab.url,
+        timeSpent: elapsedSeconds,
+        visits: 1,
+        lastVisit: now,
+        title: tab.title || hostname,
+        focusTime: 0,
+        distractions: 0,
+      };
+    } else {
+      screenTimeData.sites[hostname].timeSpent += elapsedSeconds;
+      screenTimeData.sites[hostname].visits += 1;
+      screenTimeData.sites[hostname].lastVisit = now;
+      screenTimeData.sites[hostname].title = tab.title || hostname;
+    }
+
+    screenTimeData.totalTime += elapsedSeconds;
+
+    // Check if in focus session
+    const { currentSession } = await chrome.storage.sync.get([
+      "currentSession",
+    ]);
+    if (currentSession && !currentSession.isBreak && !currentSession.isPaused) {
+      screenTimeData.focusSessionTime += elapsedSeconds;
+      screenTimeData.sites[hostname].focusTime += elapsedSeconds;
+    }
+
+    // Save updated data
+    await chrome.storage.local.set({ currentScreenTime: screenTimeData });
+  } catch (error) {
+    console.error("Error in updateScreenTime:", error);
+  }
+
+  lastActiveTime = now;
+}
+
+async function archiveScreenTimeData() {
+  try {
+    const { screenTimeHistory } = await chrome.storage.local.get([
+      "screenTimeHistory",
+    ]);
+    const history = screenTimeHistory || [];
+
+    history.push({
+      ...screenTimeData,
+      archivedAt: new Date().toISOString(),
+    });
+
+    // Keep last 30 days of history
+    while (history.length > 30) {
+      history.shift();
+    }
+
+    await chrome.storage.local.set({ screenTimeHistory: history });
+  } catch (error) {
+    console.error("Error archiving screen time data:", error);
+  }
+}
+
+async function getScreenTimeStats() {
+  try {
+    const { currentScreenTime, screenTimeHistory } =
+      await chrome.storage.local.get([
+        "currentScreenTime",
+        "screenTimeHistory",
+      ]);
+
+    const stats = {
+      today: currentScreenTime || screenTimeData,
+      history: screenTimeHistory || [],
+      topSites: Object.entries(currentScreenTime?.sites || {})
+        .sort(([, a], [, b]) => b.timeSpent - a.timeSpent)
+        .slice(0, 5)
+        .map(([domain, data]) => ({
+          domain,
+          ...data,
+        })),
+    };
+
+    return stats;
+  } catch (error) {
+    console.error("Error getting screen time stats:", error);
+    return null;
   }
 }
 
@@ -337,6 +456,37 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
   }
 });
 
+// Enhanced Event Listeners
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  if (activeTabId) {
+    await updateScreenTime();
+    await updateSiteTime(); // Keep your existing functionality
+  }
+  activeTabId = activeInfo.tabId;
+  lastActiveTime = Date.now();
+});
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === "complete" && tabId === activeTabId) {
+    lastActiveTime = Date.now();
+    await updateScreenTime();
+  }
+});
+
+chrome.windows.onFocusChanged.addListener(async (windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) {
+    if (activeTabId) {
+      await updateScreenTime();
+      await updateSiteTime();
+      activeTabId = null;
+    }
+  } else {
+    const [tab] = await chrome.tabs.query({ active: true, windowId });
+    activeTabId = tab?.id;
+    lastActiveTime = Date.now();
+  }
+});
+
 // Initialize extension
 async function initializeRules() {
   try {
@@ -405,6 +555,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           });
         }
       });
+    case "getScreenTimeStats":
+      getScreenTimeStats()
+        .then((stats) => sendResponse({ success: true, stats }))
+        .catch((error) =>
+          sendResponse({ success: false, error: error.message })
+        );
+      return true;
       return true;
   }
 });

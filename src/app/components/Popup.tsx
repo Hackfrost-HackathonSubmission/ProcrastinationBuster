@@ -6,6 +6,32 @@ import Timer from "./Timer";
 import SiteStats from "./SiteStats";
 import { Settings, StorageKey } from "@/types";
 
+// Add these new interfaces
+interface ScreenTimeStats {
+  today: {
+    totalTime: number;
+    focusSessionTime: number;
+    sites: Record<string, SiteData>;
+  };
+  topSites: Array<{
+    domain: string;
+    timeSpent: number;
+    visits: number;
+    title: string;
+  }>;
+  history: Array<any>;
+}
+
+interface SiteData {
+  url: string;
+  timeSpent: number;
+  visits: number;
+  lastVisit: number;
+  title: string;
+  focusTime: number;
+  distractions: number;
+}
+
 const DEFAULT_SETTINGS: Settings = {
   isEnabled: true,
   focusMode: false,
@@ -33,14 +59,23 @@ const DEFAULT_SETTINGS: Settings = {
 export default function Popup() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
+  const [screenTimeStats, setScreenTimeStats] =
+    useState<ScreenTimeStats | null>(null);
   const { isEnabled, focusMode, focusTimer } = settings;
+
+  const fetchScreenTimeStats = () => {
+    chrome.runtime.sendMessage({ action: "getScreenTimeStats" }, (response) => {
+      if (response.success) {
+        setScreenTimeStats(response.stats);
+      }
+    });
+  };
 
   useEffect(() => {
     const loadSettings = async () => {
       try {
         setIsLoading(true);
         const result = await chrome.storage.sync.get(null);
-        // Merge with default settings to ensure all properties exist
         const mergedSettings = {
           ...DEFAULT_SETTINGS,
           ...result,
@@ -58,6 +93,7 @@ export default function Popup() {
           },
         };
         setSettings(mergedSettings);
+        fetchScreenTimeStats();
       } catch (error) {
         console.error("Failed to load settings:", error);
         setSettings(DEFAULT_SETTINGS);
@@ -67,6 +103,8 @@ export default function Popup() {
     };
 
     loadSettings();
+    const intervalId = setInterval(fetchScreenTimeStats, 60000);
+    return () => clearInterval(intervalId);
   }, []);
 
   const updateSettings = async <K extends StorageKey>(
@@ -82,6 +120,12 @@ export default function Popup() {
     } catch (error) {
       console.error(`Failed to update ${key}:`, error);
     }
+  };
+
+  const formatTime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
   };
 
   if (isLoading) {
@@ -153,14 +197,7 @@ export default function Popup() {
         {/* Timer Component */}
         <Timer settings={settings} onUpdateSettings={updateSettings} />
 
-        {/* Site Stats Component */}
-        {settings.siteStats && settings.siteStats.dailyStats.length > 0 && (
-          <div className="mt-4">
-            <SiteStats siteStats={settings.siteStats.dailyStats} />
-          </div>
-        )}
-
-        {/* Stats Display */}
+        {/* Enhanced Stats Display */}
         <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
           <h2 className="text-sm font-semibold mb-2 dark:text-white">
             Today&apos;s Stats
@@ -169,7 +206,7 @@ export default function Popup() {
             <div className="dark:text-gray-200">
               <span>Focus Time: </span>
               <span className="font-medium">
-                {Math.round(settings.stats.dailyFocusTime / 60)} min
+                {formatTime(settings.stats.dailyFocusTime)}
               </span>
             </div>
             <div className="dark:text-gray-200">
@@ -184,6 +221,57 @@ export default function Popup() {
             </div>
           </div>
         </div>
+
+        {/* Screen Time Stats */}
+        {screenTimeStats && (
+          <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+            <h2 className="text-sm font-semibold mb-2 dark:text-white">
+              Screen Time
+            </h2>
+            <div className="space-y-2">
+              <div className="dark:text-gray-200">
+                <span>Total Screen Time: </span>
+                <span className="font-medium">
+                  {formatTime(screenTimeStats.today.totalTime)}
+                </span>
+              </div>
+              <div className="dark:text-gray-200">
+                <span>Focus Session Time: </span>
+                <span className="font-medium">
+                  {formatTime(screenTimeStats.today.focusSessionTime)}
+                </span>
+              </div>
+              {screenTimeStats.topSites &&
+                screenTimeStats.topSites.length > 0 && (
+                  <div className="mt-2">
+                    <span className="block text-sm font-semibold dark:text-white mb-1">
+                      Top Sites
+                    </span>
+                    <ul className="space-y-1">
+                      {screenTimeStats.topSites.map((site) => (
+                        <li
+                          key={site.domain}
+                          className="flex justify-between text-sm dark:text-gray-200"
+                        >
+                          <span className="truncate flex-1">{site.domain}</span>
+                          <span className="ml-2">
+                            {formatTime(site.timeSpent)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+            </div>
+          </div>
+        )}
+
+        {/* Site Stats Component */}
+        {settings.siteStats && settings.siteStats.dailyStats.length > 0 && (
+          <div className="mt-4">
+            <SiteStats siteStats={settings.siteStats.dailyStats} />
+          </div>
+        )}
 
         {/* Blocked Sites Component */}
         <BlockedSites
