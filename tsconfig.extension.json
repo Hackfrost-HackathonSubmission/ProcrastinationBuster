@@ -1,0 +1,23 @@
+{
+     "compilerOptions": {
+       "target": "ES2017",
+       "lib": ["dom", "dom.iterable", "esnext"],
+       "allowJs": true,
+       "skipLibCheck": true,
+       "strict": true,
+       "esModuleInterop": true,
+       "module": "esnext",
+       "moduleResolution": "node",
+       "resolveJsonModule": true,
+       "isolatedModules": true,
+       "jsx": "react-jsx",
+       "incremental": true,
+       "outDir": "./extension",
+       "noEmit": false,
+       "paths": {
+         "@/*": ["./src/*"]
+       }
+     },
+     "include": ["extension-src/**/*", "src/components/**/*"],
+     "exclude": ["node_modules", ".next", "src/app"]
+   }
