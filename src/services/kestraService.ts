@@ -1,11 +1,5 @@
-export interface FocusSession {
-  userId: string;
-  duration: number;
-  isCompleted: boolean;
-  taskTitle: string;
-  startTime: Date;
-  endTime: Date;
-}
+// src/services/kestraService.ts
+import { TimerSession, SessionStats } from "@/types/timer";
 
 export class KestraService {
   private static instance: KestraService;
@@ -23,7 +17,7 @@ export class KestraService {
     return KestraService.instance;
   }
 
-  async logFocusSession(session: FocusSession): Promise<void> {
+  async logTimerSession(session: TimerSession): Promise<void> {
     try {
       const response = await fetch(`${this.apiUrl}/api/v1/executions`, {
         method: "POST",
@@ -32,39 +26,50 @@ export class KestraService {
         },
         body: JSON.stringify({
           namespace: "procrastination-buster",
-          flowId: "focus-session-analytics",
+          flowId: "focus-timer-session",
           inputs: {
-            session_data: session,
-            admin_email: process.env.NEXT_PUBLIC_ADMIN_EMAIL,
+            userId: session.userId,
+            taskTitle: session.taskTitle,
+            duration: session.duration,
+            actualDuration: session.actualDuration,
+            startTime: session.startTime.toISOString(),
+            endTime: session.endTime.toISOString(),
+            completed: session.completed,
           },
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to log focus session: ${response.statusText}`);
+        throw new Error(`Failed to log timer session: ${response.statusText}`);
       }
     } catch (error) {
-      console.error("Error logging focus session:", error);
-      // Handle error appropriately
+      console.error("Error logging timer session:", error);
+      throw error;
     }
   }
 
-  async getAnalytics(): Promise<any> {
+  // Add method to get session stats
+  async getSessionStats(userId: string): Promise<SessionStats | null> {
     try {
-      const response = await fetch(`${this.apiUrl}/api/v1/executions/last`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await fetch(
+        `${this.apiUrl}/api/v1/executions/search?namespace=procrastination-buster&flowId=focus-timer-session&state=SUCCESS`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch analytics: ${response.statusText}`);
+        throw new Error(
+          `Failed to fetch session stats: ${response.statusText}`
+        );
       }
 
       return response.json();
     } catch (error) {
-      console.error("Error fetching analytics:", error);
+      console.error("Error fetching session stats:", error);
       return null;
     }
   }

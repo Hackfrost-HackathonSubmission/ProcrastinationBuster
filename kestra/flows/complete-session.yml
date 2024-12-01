@@ -1,0 +1,26 @@
+id: complete-session-flow
+namespace: procrastination-buster
+description: "Complete flow combining timer and progress tracking"
+
+inputs:
+  - name: userId
+    type: string
+    description: "User identifier"
+  - name: sessionDuration
+    type: int
+    default: 25
+    description: "Session duration in minutes"
+
+tasks:
+  - id: run-timer
+    type: io.kestra.core.tasks.flows.Flow
+    flow: procrastination-buster.focus-timer-management
+    inputs:
+      sessionDuration: "{{ inputs.sessionDuration }}"
+      breakDuration: 5
+
+  - id: update-progress
+    type: io.kestra.core.tasks.flows.Flow
+    flow: procrastination-buster.progress-tracking
+    inputs:
+      userId: "{{ inputs.userId }}"

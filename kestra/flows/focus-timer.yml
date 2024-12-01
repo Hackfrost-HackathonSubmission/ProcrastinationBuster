@@ -1,0 +1,75 @@
+id: focus-timer-session
+namespace: procrastination-buster
+description: "Tracks individual focus timer sessions"
+
+inputs:
+  - id: userId
+    name: userId
+    type: STRING
+    description: "User identifier"
+  - id: taskTitle
+    name: taskTitle
+    type: STRING
+    description: "Title of the task being worked on"
+  - id: duration
+    name: duration
+    type: INT
+    description: "Planned duration in minutes"
+  - id: actualDuration
+    name: actualDuration
+    type: INT
+    description: "Actual duration in minutes"
+  - id: startTime
+    name: startTime
+    type: DATETIME
+    description: "When the session started"
+  - id: endTime
+    name: endTime
+    type: DATETIME
+    description: "When the session ended"
+  - id: completed
+    name: completed
+    type: BOOLEAN
+    description: "Whether the session was completed or interrupted"
+
+tasks:
+  - id: record-session
+    type: io.kestra.core.tasks.scripts.Node
+    interpreter: node
+    nodePath: "/usr/bin/node"
+    inputFiles:
+      main.js: |
+        const session = {
+          userId: inputs.userId,
+          taskTitle: inputs.taskTitle,
+          plannedDuration: inputs.duration,
+          actualDuration: inputs.actualDuration,
+          startTime: new Date(inputs.startTime),
+          endTime: new Date(inputs.endTime),
+          completed: inputs.completed,
+          efficiency: (inputs.actualDuration / inputs.duration) * 100
+        };
+        
+        return { session };
+
+  - id: update-user-stats
+    type: io.kestra.core.tasks.scripts.Node
+    interpreter: node
+    nodePath: "/usr/bin/node"
+    inputFiles:
+      main.js: |
+        const session = outputs["record-session"].session;
+        
+        // Calculate time spent in minutes
+        const timeSpent = Math.floor((session.endTime - session.startTime) / 60000);
+        
+        const stats = {
+          userId: session.userId,
+          lastSessionDate: session.endTime,
+          totalMinutes: timeSpent,
+          sessionCount: 1,
+          completionRate: session.completed ? 100 : 0,
+          averageEfficiency: session.efficiency
+        };
+        
+        return { stats };

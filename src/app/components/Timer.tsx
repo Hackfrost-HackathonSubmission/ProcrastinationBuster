@@ -2,29 +2,10 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { KestraService, FocusSession } from "@/services/kestraService";
+import { KestraService } from "@/services/kestraService";
 import { SoundService } from "@/services/soundService";
 import CircularProgress from "./CircularProgress";
-
-interface FocusTask {
-  id: string;
-  title: string;
-  duration: number;
-  isCompleted: boolean;
-  createdAt: Date;
-  timeSpent?: number;
-}
-
-interface TimerState {
-  timeLeft: number;
-  isActive: boolean;
-  isBreak: boolean;
-  settings: {
-    focusDuration: number;
-    breakDuration: number;
-    volume: number;
-  };
-}
+import { TimerSession, TimerState, FocusTask } from "@/types/timer";
 
 interface TimerProps {
   initialMinutes?: number;
@@ -42,6 +23,7 @@ const Timer: React.FC<TimerProps> = ({
   onTaskComplete,
 }) => {
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
+  const [breakStartTime, setBreakStartTime] = useState<Date | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const kestraService = KestraService.getInstance();
 
@@ -54,29 +36,37 @@ const Timer: React.FC<TimerProps> = ({
   const logFocusSession = async (completed: boolean) => {
     if (currentTask && sessionStartTime) {
       try {
-        const session: FocusSession = {
-          userId: "tiwariParth", // Using the current user's login
-          duration: timerState.settings.focusDuration,
-          isCompleted: completed,
+        const endTime = new Date();
+        const actualDuration = Math.floor(
+          (endTime.getTime() - sessionStartTime.getTime()) / 60000
+        );
+
+        const session: TimerSession = {
+          userId: "tiwariParth",
           taskTitle: currentTask.title,
+          duration: timerState.settings.focusDuration,
+          actualDuration,
           startTime: sessionStartTime,
-          endTime: new Date(),
+          endTime,
+          completed,
         };
-        await kestraService.logFocusSession(session);
+
+        await kestraService.logTimerSession(session);
       } catch (error) {
-        console.error("Failed to log focus session:", error);
+        console.error("Failed to log timer session:", error);
       }
     }
   };
-
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
     if (timerState.isActive) {
       if (timerState.timeLeft > 0) {
-        // Start time tracking when timer becomes active
-        if (!sessionStartTime && !timerState.isBreak) {
+        // Start time tracking
+        if (!timerState.isBreak && !sessionStartTime) {
           setSessionStartTime(new Date());
+        } else if (timerState.isBreak && !breakStartTime) {
+          setBreakStartTime(new Date());
         }
 
         interval = setInterval(() => {
@@ -96,12 +86,11 @@ const Timer: React.FC<TimerProps> = ({
             );
             logFocusSession(true);
           }
+          setSessionStartTime(null);
         } else {
           SoundService.play("breakComplete");
+          setBreakStartTime(null);
         }
-
-        // Reset session start time when timer completes
-        setSessionStartTime(null);
 
         // Switch between focus and break
         setTimerState({
@@ -122,6 +111,7 @@ const Timer: React.FC<TimerProps> = ({
     currentTask,
     onTaskComplete,
     sessionStartTime,
+    breakStartTime,
   ]);
 
   const toggleTimer = () => {

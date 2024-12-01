@@ -1,0 +1,64 @@
+id: focus-session-analytics
+namespace: procrastination-buster
+description: "Analyzes focus session data"
+
+inputs:
+  - id: userId
+    name: userId
+    type: STRING
+    description: "User identifier"
+  - id: timeRange
+    name: timeRange
+    type: STRING
+    description: "Time range for analytics (daily, weekly, monthly)"
+    defaults: "daily"
+
+tasks:
+  - id: fetch-user-data
+    type: io.kestra.core.tasks.scripts.Node
+    interpreter: node
+    nodePath: "/usr/bin/node"
+    inputFiles:
+      main.js: |
+        const analytics = {
+          userId: inputs.userId,
+          timeRange: inputs.timeRange,
+          timestamp: new Date().toISOString()
+        };
+        return { analytics };
+
+  - id: calculate-metrics
+    type: io.kestra.core.tasks.scripts.Node
+    interpreter: node
+    nodePath: "/usr/bin/node"
+    inputFiles:
+      main.js: |
+        const userData = outputs["fetch-user-data"].analytics;
+        const metrics = {
+          ...userData,
+          totalFocusTime: 0,
+          completedSessions: 0,
+          averageSessionLength: 0,
+          productivityScore: 0
+        };
+        return { metrics };
+
+  - id: generate-insights
+    type: io.kestra.core.tasks.scripts.Node
+    interpreter: node
+    nodePath: "/usr/bin/node"
+    inputFiles:
+      main.js: |
+        const metrics = outputs["calculate-metrics"].metrics;
+        const insights = {
+          ...metrics,
+          recommendations: [
+            "Based on your focus patterns...",
+            "Consider adjusting session lengths..."
+          ],
+          nextSteps: [
+            "Try increasing focus duration",
+            "Take regular breaks"
+          ]
+        };
+        return { insights };
