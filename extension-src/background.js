@@ -1,9 +1,14 @@
-// Global variables
+/** @type {number} */
 let remainingTime = 0;
+/** @type {boolean} */
 let isPaused = false;
+/** @type {number|null} */
 let activeTabId = null;
+/** @type {Set<number>} */
 let activeRuleIds = new Set();
+/** @type {number} */
 let lastActiveTime = Date.now();
+/** @type {Object} */
 let screenTimeData = {
   date: new Date().toISOString().split("T")[0],
   totalTime: 0,
@@ -11,16 +16,45 @@ let screenTimeData = {
   focusSessionTime: 0,
 };
 
-// Service Worker setup
+// Constants
+const IDLE_DETECTION_INTERVAL = 60;
+const MAX_SITE_TIME = 8 * 60 * 60;
+const SYNC_INTERVAL = 5 * 60 * 1000;
+const MAX_HISTORY_DAYS = 30;
+
 self.oninstall = (event) => {
-  console.log("Service Worker installing...");
+  console.log("[ProcrastinationBuster] Service Worker installing...");
+  event.waitUntil(self.skipWaiting());
 };
 
 self.onactivate = (event) => {
-  console.log("Service Worker activating...");
+  console.log("[ProcrastinationBuster] Service Worker activating...");
+  event.waitUntil(self.clients.claim());
 };
 
-// Timer functions
+chrome.idle.setDetectionInterval(IDLE_DETECTION_INTERVAL);
+
+chrome.idle.onStateChanged.addListener(async (state) => {
+  try {
+    if (state === "active") {
+      lastActiveTime = Date.now();
+    } else {
+      await updateScreenTime();
+      if (!isPaused && remainingTime > 0) {
+        await pauseTimer();
+      }
+    }
+  } catch (error) {
+    console.error(
+      "[ProcrastinationBuster] Error handling idle state change:",
+      error
+    );
+  }
+});
+
+/**
+ * @param {number} minutes
+ */
 function createTimerAlarm(minutes) {
   chrome.alarms.create("timer", {
     when: Date.now() + minutes * 60 * 1000,
@@ -31,96 +65,127 @@ function clearTimerAlarm() {
   chrome.alarms.clear("timer");
 }
 
+/**
+ * @param {number} minutes
+ * @param {boolean} isBreak
+ */
 async function startTimer(minutes, isBreak = false) {
-  const startTime = Date.now();
-  remainingTime = Math.round(minutes * 60);
-  isPaused = false;
+  try {
+    const startTime = Date.now();
+    remainingTime = Math.round(minutes * 60);
+    isPaused = false;
 
-  console.log("Starting timer:", {
-    minutes,
-    isBreak,
-    startTime,
-    remainingTime,
-  });
+    console.log("[ProcrastinationBuster] Starting timer:", {
+      minutes,
+      isBreak,
+      startTime,
+      remainingTime,
+    });
 
-  createTimerAlarm(minutes);
+    clearTimerAlarm();
+    createTimerAlarm(minutes);
 
-  await chrome.storage.sync.set({
-    currentSession: {
+    const sessionData = {
       startTime,
       duration: minutes,
       isBreak,
       isPaused: false,
       remainingTime,
-    },
-  });
+    };
 
-  if (isBreak) {
-    await chrome.storage.sync.set({ focusMode: false });
-    await clearAllBlockingRules();
-  } else {
-    await chrome.storage.sync.set({ focusMode: true });
-    await updateBlockingRules();
+    await chrome.storage.sync.set({
+      currentSession: sessionData,
+      focusMode: !isBreak,
+    });
+
+    if (isBreak) {
+      await clearAllBlockingRules();
+    } else {
+      await updateBlockingRules();
+    }
+
+    updateBadge();
+    return { success: true, session: sessionData };
+  } catch (error) {
+    console.error("[ProcrastinationBuster] Error starting timer:", error);
+    return { success: false, error: error.message };
   }
-
-  updateBadge();
 }
 
 async function pauseTimer() {
-  isPaused = true;
-  clearTimerAlarm();
+  try {
+    isPaused = true;
+    clearTimerAlarm();
 
-  const sessionData = await chrome.storage.sync.get(["currentSession"]);
-  if (sessionData.currentSession) {
-    const elapsed = Math.floor(
-      (Date.now() - sessionData.currentSession.startTime) / 1000
-    );
-    remainingTime = Math.round(
-      Math.max(0, sessionData.currentSession.duration * 60 - elapsed)
-    );
+    const sessionData = await chrome.storage.sync.get(["currentSession"]);
+    if (sessionData.currentSession) {
+      const elapsed = Math.floor(
+        (Date.now() - sessionData.currentSession.startTime) / 1000
+      );
+      remainingTime = Math.round(
+        Math.max(0, sessionData.currentSession.duration * 60 - elapsed)
+      );
 
-    await chrome.storage.sync.set({
-      currentSession: {
-        ...sessionData.currentSession,
-        isPaused: true,
-        remainingTime,
-      },
-    });
+      await chrome.storage.sync.set({
+        currentSession: {
+          ...sessionData.currentSession,
+          isPaused: true,
+          remainingTime,
+        },
+      });
+    }
+
+    await clearAllBlockingRules();
+    return { success: true };
+  } catch (error) {
+    console.error("[ProcrastinationBuster] Error pausing timer:", error);
+    return { success: false, error: error.message };
   }
-
-  await clearAllBlockingRules();
 }
 
 async function resumeTimer() {
-  const sessionData = await chrome.storage.sync.get(["currentSession"]);
-  if (sessionData.currentSession && sessionData.currentSession.isPaused) {
-    isPaused = false;
-    const minutes = Math.ceil(remainingTime / 60);
+  try {
+    const sessionData = await chrome.storage.sync.get(["currentSession"]);
+    if (sessionData.currentSession && sessionData.currentSession.isPaused) {
+      isPaused = false;
+      const minutes = Math.ceil(remainingTime / 60);
 
-    await chrome.storage.sync.set({
-      currentSession: {
-        ...sessionData.currentSession,
-        startTime: Date.now(),
-        duration: minutes,
-        isPaused: false,
-        remainingTime,
-      },
-    });
+      await chrome.storage.sync.set({
+        currentSession: {
+          ...sessionData.currentSession,
+          startTime: Date.now(),
+          duration: minutes,
+          isPaused: false,
+          remainingTime,
+        },
+      });
 
-    createTimerAlarm(minutes);
+      createTimerAlarm(minutes);
 
-    if (!sessionData.currentSession.isBreak) {
-      await updateBlockingRules();
+      if (!sessionData.currentSession.isBreak) {
+        await updateBlockingRules();
+      }
+      return { success: true };
     }
+    return { success: false, error: "No paused session found" };
+  } catch (error) {
+    console.error("[ProcrastinationBuster] Error resuming timer:", error);
+    return { success: false, error: error.message };
   }
 }
 
-// Site tracking
+// Enhanced site tracking with data validation
+function validateTimeData(timeSpent) {
+  return Math.min(Math.max(0, timeSpent), MAX_SITE_TIME);
+}
+
 async function updateSiteTime() {
   if (!activeTabId) return;
 
   const now = Date.now();
-  const elapsedSeconds = Math.floor((now - lastActiveTime) / 1000);
+  const elapsedSeconds = validateTimeData(
+    Math.floor((now - lastActiveTime) / 1000)
+  );
   lastActiveTime = now;
 
   try {
@@ -132,6 +197,11 @@ async function updateSiteTime() {
     const today = new Date().toISOString().split("T")[0];
 
     if (!siteStats || siteStats.lastUpdate !== today) {
+      // Archive old stats before resetting
+      if (siteStats) {
+        await archiveSiteStats(siteStats);
+      }
+
       await chrome.storage.sync.set({
         siteStats: {
           dailyStats: [],
@@ -144,13 +214,17 @@ async function updateSiteTime() {
     const siteIndex = stats.findIndex((s) => s.domain === hostname);
 
     if (siteIndex >= 0) {
-      stats[siteIndex].timeSpent += elapsedSeconds;
+      stats[siteIndex].timeSpent = validateTimeData(
+        stats[siteIndex].timeSpent + elapsedSeconds
+      );
       stats[siteIndex].lastVisit = new Date().toISOString();
+      stats[siteIndex].visits += 1;
     } else {
       stats.push({
         url: tab.url,
         domain: hostname,
         timeSpent: elapsedSeconds,
+        visits: 1,
         lastVisit: new Date().toISOString(),
       });
     }
@@ -162,20 +236,28 @@ async function updateSiteTime() {
       },
     });
   } catch (error) {
-    console.error("Error updating site time:", error);
+    console.error("[ProcrastinationBuster] Error updating site time:", error);
   }
 }
 
-// Enhanced screen time tracking functions
+// Enhanced screen time tracking
 async function updateScreenTime() {
   if (!activeTabId) return;
 
   const now = Date.now();
-  const elapsedSeconds = Math.floor((now - lastActiveTime) / 1000);
-
   try {
     const tab = await chrome.tabs.get(activeTabId);
-    if (!tab.url) return;
+    const window = await chrome.windows.get(tab.windowId);
+
+    if (!tab.url || !tab.active || !window.focused) {
+      lastActiveTime = now;
+      return;
+    }
+
+    const elapsedSeconds = validateTimeData(
+      Math.floor((now - lastActiveTime) / 1000)
+    );
+    if (elapsedSeconds <= 0) return;
 
     const hostname = new URL(tab.url).hostname;
     const today = new Date().toISOString().split("T")[0];
@@ -203,55 +285,89 @@ async function updateScreenTime() {
         distractions: 0,
       };
     } else {
-      screenTimeData.sites[hostname].timeSpent += elapsedSeconds;
+      screenTimeData.sites[hostname].timeSpent = validateTimeData(
+        screenTimeData.sites[hostname].timeSpent + elapsedSeconds
+      );
       screenTimeData.sites[hostname].visits += 1;
       screenTimeData.sites[hostname].lastVisit = now;
       screenTimeData.sites[hostname].title = tab.title || hostname;
     }
 
-    screenTimeData.totalTime += elapsedSeconds;
+    screenTimeData.totalTime = validateTimeData(
+      screenTimeData.totalTime + elapsedSeconds
+    );
 
-    // Check if in focus session
+    // Update focus session time
     const { currentSession } = await chrome.storage.sync.get([
       "currentSession",
     ]);
     if (currentSession && !currentSession.isBreak && !currentSession.isPaused) {
-      screenTimeData.focusSessionTime += elapsedSeconds;
-      screenTimeData.sites[hostname].focusTime += elapsedSeconds;
+      screenTimeData.focusSessionTime = validateTimeData(
+        screenTimeData.focusSessionTime + elapsedSeconds
+      );
+      screenTimeData.sites[hostname].focusTime = validateTimeData(
+        screenTimeData.sites[hostname].focusTime + elapsedSeconds
+      );
     }
 
-    // Save updated data
-    await chrome.storage.local.set({ currentScreenTime: screenTimeData });
+    await chrome.storage.local.set({
+      currentScreenTime: screenTimeData,
+      lastActiveTime: now,
+    });
   } catch (error) {
-    console.error("Error in updateScreenTime:", error);
+    console.error("[ProcrastinationBuster] Error in updateScreenTime:", error);
   }
 
   lastActiveTime = now;
 }
 
+// Data archiving functions
 async function archiveScreenTimeData() {
   try {
-    const { screenTimeHistory } = await chrome.storage.local.get([
+    const { screenTimeHistory = [] } = await chrome.storage.local.get([
       "screenTimeHistory",
     ]);
-    const history = screenTimeHistory || [];
 
-    history.push({
+    screenTimeHistory.push({
       ...screenTimeData,
       archivedAt: new Date().toISOString(),
     });
 
-    // Keep last 30 days of history
-    while (history.length > 30) {
-      history.shift();
+    while (screenTimeHistory.length > MAX_HISTORY_DAYS) {
+      screenTimeHistory.shift();
     }
 
-    await chrome.storage.local.set({ screenTimeHistory: history });
+    await chrome.storage.local.set({ screenTimeHistory });
   } catch (error) {
-    console.error("Error archiving screen time data:", error);
+    console.error(
+      "[ProcrastinationBuster] Error archiving screen time data:",
+      error
+    );
   }
 }
 
+async function archiveSiteStats(stats) {
+  try {
+    const { siteStatsHistory = [] } = await chrome.storage.local.get([
+      "siteStatsHistory",
+    ]);
+
+    siteStatsHistory.push({
+      ...stats,
+      archivedAt: new Date().toISOString(),
+    });
+
+    while (siteStatsHistory.length > MAX_HISTORY_DAYS) {
+      siteStatsHistory.shift();
+    }
+
+    await chrome.storage.local.set({ siteStatsHistory });
+  } catch (error) {
+    console.error("[ProcrastinationBuster] Error archiving site stats:", error);
+  }
+}
+
+// Stats retrieval function
 async function getScreenTimeStats() {
   try {
     const { currentScreenTime, screenTimeHistory } =
@@ -272,13 +388,21 @@ async function getScreenTimeStats() {
         })),
     };
 
-    return stats;
+    return { success: true, stats };
   } catch (error) {
-    console.error("Error getting screen time stats:", error);
-    return null;
+    console.error(
+      "[ProcrastinationBuster] Error getting screen time stats:",
+      error
+    );
+    return { success: false, error: error.message };
   }
 }
 
+// Site blocking functions
+/**
+ * Clears all blocking rules and resets the extension's blocking state
+ * @returns {Promise<void>}
+ */
 async function clearAllBlockingRules() {
   try {
     // Clear dynamic rules
@@ -293,13 +417,13 @@ async function clearAllBlockingRules() {
     // Clear any remaining rules
     const remainingRules = await chrome.declarativeNetRequest.getDynamicRules();
     if (remainingRules.length > 0) {
-      console.error("Rules still exist after clearing:", remainingRules);
+      console.log("Cleaning up remaining rules:", remainingRules);
       await chrome.declarativeNetRequest.updateDynamicRules({
         removeRuleIds: remainingRules.map((rule) => rule.id),
       });
     }
 
-    // Disable static rulesets
+    // Disable static rulesets if any exist
     const enabledRulesets =
       await chrome.declarativeNetRequest.getEnabledRulesets();
     if (enabledRulesets.length > 0) {
@@ -307,12 +431,33 @@ async function clearAllBlockingRules() {
         disableRulesetIds: enabledRulesets,
       });
     }
-    console.log("All blocking rules cleared successfully");
+
+    // Update storage to reflect cleared state
+    await chrome.storage.sync.set({
+      activeBlockingRules: [],
+      lastRuleClear: Date.now(),
+    });
+
+    console.log("Successfully cleared all blocking rules");
+    return true;
   } catch (error) {
-    console.error("Error clearing blocking rules:", error);
+    console.error("Failed to clear blocking rules:", error);
+    // Attempt recovery
+    try {
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: Array.from(activeRuleIds),
+      });
+      activeRuleIds.clear();
+    } catch (recoveryError) {
+      console.error("Recovery attempt failed:", recoveryError);
+    }
+    return false;
   }
 }
 
+/**
+ * @returns {Promise<boolean>}
+ */
 async function updateBlockingRules() {
   try {
     await clearAllBlockingRules();
@@ -326,11 +471,11 @@ async function updateBlockingRules() {
 
     const { isEnabled, focusMode, blockedSites, currentSession } = data;
 
-    console.log("Updating blocking rules:", {
+    console.log("Updating blocking rules with state:", {
       isEnabled,
       focusMode,
-      blockedSites,
-      currentSession,
+      blockedSitesCount: blockedSites?.length,
+      hasActiveSession: !!currentSession,
     });
 
     if (
@@ -341,13 +486,13 @@ async function updateBlockingRules() {
       currentSession.isPaused ||
       currentSession.isBreak
     ) {
-      console.log("Not creating blocking rules due to conditions not met");
-      await clearAllBlockingRules();
-      return;
+      console.log("Skipping rule creation - conditions not met");
+      return true;
     }
 
+    // Create rules for each blocked site
     const rules = blockedSites.map((site, index) => ({
-      id: index + 1000,
+      id: index + 1000, // Start IDs at 1000 to avoid conflicts
       priority: 1,
       action: {
         type: "redirect",
@@ -359,245 +504,69 @@ async function updateBlockingRules() {
       },
     }));
 
-    console.log("Adding blocking rules:", rules);
-
+    // Apply the new rules
     await chrome.declarativeNetRequest.updateDynamicRules({
       removeRuleIds: Array.from(activeRuleIds),
       addRules: rules,
     });
 
+    // Update active rule tracking
     activeRuleIds = new Set(rules.map((rule) => rule.id));
-    console.log("Rules updated successfully");
-  } catch (error) {
-    console.error("Error updating blocking rules:", error);
-    await clearAllBlockingRules();
-  }
-}
 
-function updateBadge() {
-  chrome.storage.sync.get(["currentSession"], (data) => {
-    if (data.currentSession) {
-      const { startTime, duration, isPaused, remainingTime } =
-        data.currentSession;
-      let remaining;
-
-      if (isPaused) {
-        remaining = Math.round(remainingTime);
-      } else {
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        remaining = Math.round(Math.max(0, duration * 60 - elapsed));
-      }
-
-      const text = `${Math.floor(remaining / 60)}:${Math.floor(remaining % 60)
-        .toString()
-        .padStart(2, "0")}`;
-      chrome.action.setBadgeText({ text });
-    } else {
-      chrome.action.setBadgeText({ text: "" });
-    }
-  });
-}
-
-async function endTimer() {
-  clearTimerAlarm();
-
-  try {
-    console.log("Timer ending, clearing all blocking rules");
-    await clearAllBlockingRules();
-
-    const sessionData = await chrome.storage.sync.get(["currentSession"]);
-    if (sessionData.currentSession && !sessionData.currentSession.isBreak) {
-      const statsData = await chrome.storage.sync.get(["stats"]);
-      const stats = statsData.stats || {};
-      stats.dailyFocusTime += sessionData.currentSession.duration;
-      await chrome.storage.sync.set({ stats });
-    }
-
+    // Store current rules in storage for recovery
     await chrome.storage.sync.set({
-      currentSession: null,
-      focusMode: false,
+      activeBlockingRules: Array.from(activeRuleIds),
+      lastRuleUpdate: Date.now(),
     });
 
-    await chrome.action.setBadgeText({ text: "" });
-    await clearAllBlockingRules();
-
-    chrome.notifications.create({
-      type: "basic",
-      iconUrl: "/icon48.png",
-      title: "Timer Complete!",
-      message: "Great job! Take a break or start another session.",
-      silent: true,
-    });
+    console.log(`Successfully created ${rules.length} blocking rules`);
+    return true;
   } catch (error) {
-    console.error("Error in endTimer:", error);
+    console.error("Failed to update blocking rules:", error);
+    // Attempt to clear rules on failure
     await clearAllBlockingRules();
+    return false;
   }
 }
 
-// Event Listeners
-chrome.tabs.onActivated.addListener(async (activeInfo) => {
-  if (activeTabId) {
-    await updateSiteTime();
-  }
-  activeTabId = activeInfo.tabId;
-  lastActiveTime = Date.now();
-});
-
-chrome.windows.onFocusChanged.addListener(async (windowId) => {
-  if (windowId === chrome.windows.WINDOW_ID_NONE) {
-    if (activeTabId) {
-      await updateSiteTime();
-      activeTabId = null;
-    }
-  } else {
-    const [tab] = await chrome.tabs.query({ active: true, windowId });
-    activeTabId = tab?.id;
-    lastActiveTime = Date.now();
-  }
-});
-
-// Enhanced Event Listeners
-chrome.tabs.onActivated.addListener(async (activeInfo) => {
-  if (activeTabId) {
-    await updateScreenTime();
-    await updateSiteTime(); // Keep your existing functionality
-  }
-  activeTabId = activeInfo.tabId;
-  lastActiveTime = Date.now();
-});
-
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.status === "complete" && tabId === activeTabId) {
-    lastActiveTime = Date.now();
-    await updateScreenTime();
-  }
-});
-
-chrome.windows.onFocusChanged.addListener(async (windowId) => {
-  if (windowId === chrome.windows.WINDOW_ID_NONE) {
-    if (activeTabId) {
-      await updateScreenTime();
-      await updateSiteTime();
-      activeTabId = null;
-    }
-  } else {
-    const [tab] = await chrome.tabs.query({ active: true, windowId });
-    activeTabId = tab?.id;
-    lastActiveTime = Date.now();
-  }
-});
-
-// Initialize extension
-async function initializeRules() {
+/**
+ * Validates and sanitizes a URL pattern for blocking
+ * @param {string} urlPattern The URL pattern to validate
+ * @returns {string|null} Sanitized URL pattern or null if invalid
+ */
+function validateBlockingPattern(urlPattern) {
   try {
-    const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-    await chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds: existingRules.map((rule) => rule.id),
-    });
+    // Remove protocol and www if present
+    let sanitized = urlPattern.replace(/^https?:\/\/(www\.)?/, "");
 
-    if (
-      (await chrome.declarativeNetRequest.getAvailableStaticRuleCount()) > 0
-    ) {
-      const enabledRulesets =
-        await chrome.declarativeNetRequest.getEnabledRulesets();
-      await chrome.declarativeNetRequest.updateEnabledRulesets({
-        disableRulesetIds: enabledRulesets,
-      });
+    // Remove trailing slashes
+    sanitized = sanitized.replace(/\/+$/, "");
+
+    // Check for valid domain format
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9-_.]*\.[a-zA-Z]{2,}$/.test(sanitized)) {
+      return null;
     }
+
+    return sanitized;
   } catch (error) {
-    console.error("Error initializing rules:", error);
+    console.error("URL pattern validation failed:", error);
+    return null;
   }
 }
 
-// Message handling
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  switch (request.action) {
-    case "startTimer":
-      startTimer(request.minutes, request.isBreak);
-      sendResponse({ success: true });
-      break;
-    case "pauseTimer":
-      pauseTimer();
-      sendResponse({ success: true });
-      break;
-    case "resumeTimer":
-      resumeTimer();
-      sendResponse({ success: true });
-      break;
-    case "endTimer":
-      endTimer();
-      sendResponse({ success: true });
-      break;
-    case "getTimeRemaining":
-      chrome.storage.sync.get(["currentSession"], (data) => {
-        if (data.currentSession) {
-          const { startTime, duration, isPaused, remainingTime } =
-            data.currentSession;
-          let remaining;
-
-          if (isPaused) {
-            remaining = remainingTime;
-          } else {
-            const elapsed = Math.floor((Date.now() - startTime) / 1000);
-            remaining = Math.max(0, duration * 60 - elapsed);
-          }
-
-          sendResponse({
-            remainingTime: remaining,
-            isRunning: !isPaused,
-            totalDuration: duration * 60,
-          });
-        } else {
-          sendResponse({
-            remainingTime: 0,
-            isRunning: false,
-            totalDuration: 0,
-          });
-        }
-      });
-    case "getScreenTimeStats":
-      getScreenTimeStats()
-        .then((stats) => sendResponse({ success: true, stats }))
-        .catch((error) =>
-          sendResponse({ success: false, error: error.message })
-        );
-      return true;
-      return true;
+/**
+ * Handles cleanup of blocking rules when extension is disabled or suspended
+ */
+async function handleRuleCleanup() {
+  try {
+    await clearAllBlockingRules();
+    await chrome.storage.sync.remove(["activeBlockingRules", "lastRuleUpdate"]);
+    console.log("Cleanup completed successfully");
+  } catch (error) {
+    console.error("Cleanup failed:", error);
   }
-});
+}
 
-// Initialize on install
-chrome.runtime.onInstalled.addListener(async () => {
-  await initializeRules();
-  chrome.storage.sync.set({
-    isEnabled: true,
-    focusMode: false,
-    focusTimer: 25,
-    breakTimer: 5,
-    currentSession: null,
-    blockedSites: [],
-    stats: {
-      dailyFocusTime: 0,
-      distractions: 0,
-      lastUpdate: new Date().toISOString(),
-      focusSessions: [],
-      streak: {
-        current: 0,
-        best: 0,
-        lastDate: new Date().toISOString(),
-      },
-    },
-  });
-
-  chrome.action.setBadgeBackgroundColor({ color: "#4CAF50" });
-  chrome.action.setBadgeText({ text: "" });
-});
-
-// Cleanup handlers
-chrome.runtime.onSuspend.addListener(async () => {
-  await clearAllBlockingRules();
-});
-
-chrome.runtime.onUpdateAvailable.addListener(async () => {
-  await clearAllBlockingRules();
-});
+// Add these listeners to ensure proper cleanup
+chrome.runtime.onSuspend.addListener(handleRuleCleanup);
+chrome.runtime.onUpdateAvailable.addListener(handleRuleCleanup);
