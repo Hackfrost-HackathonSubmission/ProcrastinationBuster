@@ -1,0 +1,32 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model TimerState {
+  id            String   @id @default(cuid())
+  userId        String
+  timeLeft      Int
+  isActive      Boolean
+  isBreak       Boolean
+  focusDuration Int
+  breakDuration Int
+  lastUpdate    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model UserSettings {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  focusDuration   Int      @default(25)
+  breakDuration   Int      @default(5)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
