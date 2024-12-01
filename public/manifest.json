@@ -2,11 +2,10 @@
   "manifest_version": 2,
   "name": "ProcrastinationBuster",
   "version": "1.0",
-  "description": "Control your attention span and focus on your work",
   "permissions": [
     "storage",
-    "tabs",
     "webNavigation",
+    "tabs",
     "*://*/*"
   ],
   "background": {
@@ -15,13 +14,8 @@
     ],
     "persistent": false
   },
-  "browser_action": {
-    "default_popup": "popup.html"
-  },
-  "externally_connectable": {
-    "matches": [
-      "*://localhost/*",
-      "*://*.vercel.app/*"
-    ]
-  }
+  "web_accessible_resources": [
+    "blocked.html"
+  ],
+  "content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self'"
 }

@@ -1,9 +1,18 @@
 // public/background.js
-chrome.storage.local.get(["blockedSites"], function (result) {
-  const sites = result.blockedSites || [];
+const STORAGE_KEY = "blockedSites";
 
-  // Listen for navigation events
-  chrome.webNavigation.onCompleted.addListener(function (details) {
+// Sync storage on extension load
+chrome.runtime.onInstalled.addListener(() => {
+  const webappData = localStorage.getItem(STORAGE_KEY);
+  if (webappData) {
+    chrome.storage.local.set({ [STORAGE_KEY]: JSON.parse(webappData) });
+  }
+});
+
+// Check URLs against blocked sites
+chrome.webNavigation.onCompleted.addListener((details) => {
+  chrome.storage.local.get([STORAGE_KEY], (result) => {
+    const sites = result[STORAGE_KEY] || [];
     const url = new URL(details.url);
     const hostname = url.hostname.replace(/^www\./, "");
 
@@ -19,10 +28,11 @@ chrome.storage.local.get(["blockedSites"], function (result) {
   });
 });
 
-// Listen for storage changes
-chrome.storage.onChanged.addListener(function (changes, namespace) {
-  if (namespace === "local" && changes.blockedSites) {
-    // Update our local sites list
-    const sites = changes.blockedSites.newValue || [];
+// Listen for storage changes from webapp
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === "local" && changes[STORAGE_KEY]) {
+    const newSites = changes[STORAGE_KEY].newValue;
+    // Update local storage to keep in sync
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newSites));
   }
 });

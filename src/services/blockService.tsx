@@ -12,77 +12,50 @@ interface SerializedBlockedSite {
   isActive: boolean;
   createdAt: string;
 }
-
+export interface ChromeStorageResult {
+  [key: string]: SerializedBlockedSite[];
+}
 export class BlockService {
   private static readonly STORAGE_KEY = "blockedSites";
 
-  // Method to determine if we're in the extension context
-  private static isExtensionContext(): boolean {
-    return typeof chrome !== "undefined" && chrome.runtime?.id !== undefined;
-  }
-
-  // Method to save sites to storage and optionally sync with extension
-  private static async saveToStorage(sites: BlockedSite[]): Promise<void> {
-    // Always save to localStorage
-    localStorage.setItem(
-      this.STORAGE_KEY,
-      JSON.stringify(
-        sites.map((site) => ({
-          ...site,
-          createdAt: site.createdAt.toISOString(),
-        }))
-      )
-    );
-
-    // If we're in the extension context, also save to chrome.storage
-    if (this.isExtensionContext() && chrome.storage?.local) {
-      try {
-        await chrome.storage.local.set({ [this.STORAGE_KEY]: sites });
-      } catch (error) {
-        console.error("Error saving to chrome storage:", error);
-      }
+  // Web-only storage methods
+  private static async saveToLocalStorage(sites: BlockedSite[]): Promise<void> {
+    try {
+      const serializedSites = sites.map((site) => ({
+        ...site,
+        createdAt: site.createdAt.toISOString(),
+      }));
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(serializedSites));
+    } catch (error) {
+      console.error("Error saving to localStorage:", error);
     }
   }
 
-  static async getBlockedSites(): Promise<BlockedSite[]> {
+  private static getFromLocalStorage(): BlockedSite[] {
     try {
-      let sites: SerializedBlockedSite[] = [];
+      const sitesJson = localStorage.getItem(this.STORAGE_KEY);
+      if (!sitesJson) return [];
 
-      // Try to get sites from localStorage first
-      const localSites = localStorage.getItem(this.STORAGE_KEY);
-      if (localSites) {
-        sites = JSON.parse(localSites);
-      }
-
-      // If we're in extension context, try to get sites from chrome.storage
-      if (this.isExtensionContext() && chrome.storage?.local) {
-        try {
-          const result = await chrome.storage.local.get(this.STORAGE_KEY);
-          if (result[this.STORAGE_KEY]) {
-            sites = result[this.STORAGE_KEY];
-          }
-        } catch (error) {
-          console.error("Error getting sites from chrome storage:", error);
-        }
-      }
-
-      // Convert dates and return
+      const sites = JSON.parse(sitesJson) as SerializedBlockedSite[];
       return sites.map((site) => ({
         ...site,
         createdAt: new Date(site.createdAt),
       }));
     } catch (error) {
-      console.error("Error getting blocked sites:", error);
+      console.error("Error reading from localStorage:", error);
       return [];
     }
+  }
+
+  static async getBlockedSites(): Promise<BlockedSite[]> {
+    return this.getFromLocalStorage();
   }
 
   static async addBlockedSite(url: string): Promise<BlockedSite> {
     try {
       const cleanUrl = url.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, "");
-      const sites = await this.getBlockedSites();
+      const sites = this.getFromLocalStorage();
 
-      // Check if site already exists
       const existingSite = sites.find((site) => site.url === cleanUrl);
       if (existingSite) {
         return existingSite;
@@ -95,7 +68,7 @@ export class BlockService {
       };
 
       sites.push(newSite);
-      await this.saveToStorage(sites);
+      await this.saveToLocalStorage(sites);
 
       return newSite;
     } catch (error) {
@@ -106,9 +79,9 @@ export class BlockService {
 
   static async removeBlockedSite(url: string): Promise<void> {
     try {
-      const sites = await this.getBlockedSites();
+      const sites = this.getFromLocalStorage();
       const filteredSites = sites.filter((site) => site.url !== url);
-      await this.saveToStorage(filteredSites);
+      await this.saveToLocalStorage(filteredSites);
     } catch (error) {
       console.error("Error removing blocked site:", error);
       throw new Error("Failed to remove blocked site");
@@ -117,13 +90,13 @@ export class BlockService {
 
   static async toggleBlockedSite(url: string): Promise<BlockedSite | null> {
     try {
-      const sites = await this.getBlockedSites();
+      const sites = this.getFromLocalStorage();
       const siteIndex = sites.findIndex((site) => site.url === url);
 
       if (siteIndex === -1) return null;
 
       sites[siteIndex].isActive = !sites[siteIndex].isActive;
-      await this.saveToStorage(sites);
+      await this.saveToLocalStorage(sites);
 
       return sites[siteIndex];
     } catch (error) {
@@ -139,7 +112,7 @@ export class BlockService {
       const currentHost = window.location.hostname
         .toLowerCase()
         .replace(/^www\./, "");
-      const sites = await this.getBlockedSites();
+      const sites = this.getFromLocalStorage();
 
       return sites.some((site) => site.isActive && site.url === currentHost);
     } catch (error) {
