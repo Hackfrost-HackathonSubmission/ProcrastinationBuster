@@ -1,0 +1,24 @@
+-- migrations/001_create_kestra_tables.sql
+CREATE SCHEMA IF NOT EXISTS kestra;
+
+CREATE TABLE IF NOT EXISTS kestra_executions (
+    id SERIAL PRIMARY KEY,
+    flow_id VARCHAR(255) NOT NULL,
+    namespace VARCHAR(255) NOT NULL,
+    state VARCHAR(50) NOT NULL,
+    inputs JSONB,
+    outputs JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS kestra_tasks (
+    id SERIAL PRIMARY KEY,
+    execution_id INTEGER REFERENCES kestra_executions(id),
+    task_id VARCHAR(255) NOT NULL,
+    state VARCHAR(50) NOT NULL,
+    attempt INTEGER DEFAULT 0,
+    outputs JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

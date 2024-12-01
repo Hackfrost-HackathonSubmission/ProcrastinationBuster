@@ -2,11 +2,32 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { KestraService, FocusSession } from "@/services/kestraService";
+import { SoundService } from "@/services/soundService";
 import CircularProgress from "./CircularProgress";
-import { FocusTask, TimerState } from "@/types";
+
+interface FocusTask {
+  id: string;
+  title: string;
+  duration: number;
+  isCompleted: boolean;
+  createdAt: Date;
+  timeSpent?: number;
+}
+
+interface TimerState {
+  timeLeft: number;
+  isActive: boolean;
+  isBreak: boolean;
+  settings: {
+    focusDuration: number;
+    breakDuration: number;
+    volume: number;
+  };
+}
 
 interface TimerProps {
-  initialMinutes: number;
+  initialMinutes?: number;
   timerState: TimerState;
   setTimerState: (state: TimerState) => void;
   currentTask?: FocusTask;
@@ -14,51 +35,103 @@ interface TimerProps {
 }
 
 const Timer: React.FC<TimerProps> = ({
-  initialMinutes,
+  initialMinutes = 25,
   timerState,
   setTimerState,
   currentTask,
   onTaskComplete,
 }) => {
-  const [volume, setVolume] = useState(0.5);
+  const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const kestraService = KestraService.getInstance();
+
+  // Initialize sound service
+  useEffect(() => {
+    SoundService.init();
+    SoundService.setVolume(timerState.settings.volume);
+  }, [timerState.settings.volume]);
+
+  const logFocusSession = async (completed: boolean) => {
+    if (currentTask && sessionStartTime) {
+      try {
+        const session: FocusSession = {
+          userId: "tiwariParth", // Using the current user's login
+          duration: timerState.settings.focusDuration,
+          isCompleted: completed,
+          taskTitle: currentTask.title,
+          startTime: sessionStartTime,
+          endTime: new Date(),
+        };
+        await kestraService.logFocusSession(session);
+      } catch (error) {
+        console.error("Failed to log focus session:", error);
+      }
+    }
+  };
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
-    if (timerState.isActive && timerState.timeLeft > 0) {
-      interval = setInterval(() => {
+    if (timerState.isActive) {
+      if (timerState.timeLeft > 0) {
+        // Start time tracking when timer becomes active
+        if (!sessionStartTime && !timerState.isBreak) {
+          setSessionStartTime(new Date());
+        }
+
+        interval = setInterval(() => {
+          setTimerState({
+            ...timerState,
+            timeLeft: timerState.timeLeft - 1,
+          });
+        }, 1000);
+      } else {
+        // Timer completed
+        if (!timerState.isBreak) {
+          SoundService.play("timerComplete");
+          if (currentTask) {
+            onTaskComplete?.(
+              currentTask.id,
+              timerState.settings.focusDuration * 60
+            );
+            logFocusSession(true);
+          }
+        } else {
+          SoundService.play("breakComplete");
+        }
+
+        // Reset session start time when timer completes
+        setSessionStartTime(null);
+
+        // Switch between focus and break
         setTimerState({
           ...timerState,
-          timeLeft: timerState.timeLeft - 1,
+          isActive: false,
+          isBreak: !timerState.isBreak,
+          timeLeft: !timerState.isBreak
+            ? timerState.settings.breakDuration * 60
+            : timerState.settings.focusDuration * 60,
         });
-      }, 1000);
-    } else if (timerState.timeLeft === 0) {
-      if (audioRef.current) {
-        audioRef.current.play();
       }
-
-      if (!timerState.isBreak && currentTask) {
-        onTaskComplete?.(
-          currentTask.id,
-          timerState.settings.focusDuration * 60
-        );
-      }
-
-      setTimerState({
-        ...timerState,
-        isActive: false,
-        isBreak: !timerState.isBreak,
-        timeLeft: !timerState.isBreak
-          ? timerState.settings.breakDuration * 60
-          : timerState.settings.focusDuration * 60,
-      });
     }
 
     return () => clearInterval(interval);
-  }, [timerState, setTimerState]);
+  }, [
+    timerState,
+    setTimerState,
+    currentTask,
+    onTaskComplete,
+    sessionStartTime,
+  ]);
 
   const toggleTimer = () => {
+    SoundService.play("buttonClick");
+    if (
+      !timerState.isActive &&
+      timerState.timeLeft === timerState.settings.focusDuration * 60
+    ) {
+      setSessionStartTime(new Date());
+    }
     setTimerState({
       ...timerState,
       isActive: !timerState.isActive,
@@ -66,6 +139,11 @@ const Timer: React.FC<TimerProps> = ({
   };
 
   const resetTimer = () => {
+    SoundService.play("buttonClick");
+    setSessionStartTime(null);
+    if (!timerState.isBreak && timerState.isActive) {
+      logFocusSession(false);
+    }
     setTimerState({
       ...timerState,
       isActive: false,
@@ -81,14 +159,16 @@ const Timer: React.FC<TimerProps> = ({
   };
 
   const progress =
-    ((timerState.settings.focusDuration * 60 - timerState.timeLeft) /
-      (timerState.settings.focusDuration * 60)) *
+    ((timerState.isBreak
+      ? timerState.settings.breakDuration * 60 - timerState.timeLeft
+      : timerState.settings.focusDuration * 60 - timerState.timeLeft) /
+      (timerState.isBreak
+        ? timerState.settings.breakDuration * 60
+        : timerState.settings.focusDuration * 60)) *
     100;
 
   return (
     <div className="text-center">
-      <audio ref={audioRef} src="/notification.mp3" />
-
       <div className="flex justify-center mb-8">
         <CircularProgress
           progress={progress}
@@ -121,33 +201,10 @@ const Timer: React.FC<TimerProps> = ({
       </div>
 
       {currentTask && timerState.isActive && !timerState.isBreak && (
-        <div className="mt-6 p-4 bg-gray-700 rounded-lg">
-          <p className="text-purple-400 text-sm uppercase">
-            Current Focus Task
-          </p>
-          <h3 className="text-white text-lg font-semibold mt-1">
-            {currentTask.title}
-          </h3>
-          <p className="text-gray-400 text-sm mt-1">
-            Duration: {currentTask.duration} minutes
-          </p>
+        <div className="mt-4 text-gray-400">
+          Currently focusing on: {currentTask.title}
         </div>
       )}
-
-      <div className="mt-6">
-        <label className="text-gray-400 text-sm block mb-2">
-          Notification Volume: {Math.round(volume * 100)}%
-        </label>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.1"
-          value={volume}
-          onChange={(e) => setVolume(parseFloat(e.target.value))}
-          className="w-full max-w-xs"
-        />
-      </div>
     </div>
   );
 };
