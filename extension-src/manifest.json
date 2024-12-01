@@ -10,7 +10,8 @@
           "declarativeNetRequest",
           "management",
           "tabs",
-          "activeTab"
+          "activeTab",
+          "idle"
      ],
      "host_permissions": [
           "<all_urls>"
