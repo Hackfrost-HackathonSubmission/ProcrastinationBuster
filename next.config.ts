@@ -1,30 +1,21 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  images: {
+    unoptimized: true,
+  },
+
+  // Webpack configuration for all static assets
   webpack: (config, { isServer }) => {
-    // Add support for audio files
     config.module.rules.push({
-      test: /\.(mp3)$/,
+      test: /\.(mp3|json)$/,
       type: "asset/resource",
       generator: {
-        filename: "static/media/[name][ext]",
+        filename: "static/[name][ext]",
       },
     });
 
     return config;
-  },
-  async headers() {
-    return [
-      {
-        source: "/sounds/:path*",
-        headers: [
-          {
-            key: "Content-Type",
-            value: "audio/mpeg",
-          },
-        ],
-      },
-    ];
   },
 };
 

@@ -10,7 +10,7 @@
     "db:up": "docker-compose up -d",
     "db:down": "docker-compose down",
     "db:studio": "prisma studio",
-    "build-extension": "DISABLE_ESLINT_PLUGIN=true next build && cp public/{manifest.json,background.js,blocked.html} out/"
+    "build-extension": "DISABLE_ESLINT_PLUGIN=true next build && cp public/{manifest.json,background.js,blocked.html,index.html,popup.js} out/"
   },
   "dependencies": {
     "next": "15.0.3",
