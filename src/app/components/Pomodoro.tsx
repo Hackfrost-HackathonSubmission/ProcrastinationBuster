@@ -1,6 +1,6 @@
 // src/components/PomodoroTimer.tsx
 import { useState, useEffect } from "react";
-import { TimerSettings } from "@/app/types";
+import { TimerSettings } from "@/types";
 
 export default function PomodoroTimer() {
   const [settings, setSettings] = useState<TimerSettings>({

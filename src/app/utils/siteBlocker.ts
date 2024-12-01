@@ -1,5 +1,5 @@
 // src/utils/siteBlocker.ts
-import { BlockedSite } from "@/app/types";
+import { BlockedSite } from "@/types";
 
 export const addBlockedSite = (url: string) => {
   const sites = getBlockedSites();

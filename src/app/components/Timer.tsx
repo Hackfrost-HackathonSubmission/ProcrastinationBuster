@@ -28,6 +28,7 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
 
   useEffect(() => {
     SoundService.init();
+    SoundService.preloadSounds().catch(console.error);
   }, []);
 
   useEffect(() => {

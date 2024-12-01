@@ -8,42 +8,37 @@ export class SoundService {
   private static volume: number = 0.5;
   private static initialized: boolean = false;
 
-  static init() {
+  static async init() {
     if (this.initialized) return;
 
     try {
-      this.sounds = {
-        timerComplete: this.createAudio("/sounds/timer-complete.mp3"),
-        breakComplete: this.createAudio("/sounds/break-complete.mp3"),
-        buttonClick: this.createAudio("/sounds/button-click.mp3"),
+      // Import audio files
+      const soundFiles = {
+        timerComplete: await import("/public/sounds/timer-complete.mp3"),
+        breakComplete: await import("/public/sounds/break-complete.mp3"),
+        buttonClick: await import("/public/sounds/button-click.mp3"),
       };
 
-      // Set initial volume for all sounds
+      // Create Audio elements with the imported files
+      this.sounds = {
+        timerComplete: new Audio(soundFiles.timerComplete.default),
+        breakComplete: new Audio(soundFiles.breakComplete.default),
+        buttonClick: new Audio(soundFiles.buttonClick.default),
+      };
+
+      // Set initial volume and load sounds
       Object.values(this.sounds).forEach((sound) => {
         if (sound) {
           sound.volume = this.volume;
+          sound.load();
         }
       });
 
       this.initialized = true;
-      console.log("Sound service initialized successfully");
+      console.log("Sound service initialized with:", this.sounds);
     } catch (error) {
       console.error("Failed to initialize sound service:", error);
     }
-  }
-
-  private static createAudio(src: string): HTMLAudioElement {
-    const audio = new Audio(src);
-
-    audio.addEventListener("error", (e) => {
-      console.error(`Error loading audio file ${src}:`, e);
-    });
-
-    audio.addEventListener("canplaythrough", () => {
-      console.log(`Audio file loaded successfully: ${src}`);
-    });
-
-    return audio;
   }
 
   static setVolume(volume: number) {
@@ -56,24 +51,48 @@ export class SoundService {
   }
 
   static async play(soundName: SoundName) {
+    if (!this.initialized) {
+      await this.init();
+    }
+
     try {
       const sound = this.sounds[soundName];
       if (!sound) {
-        console.error(`Sound ${soundName} not found`);
-        return;
+        throw new Error(`Sound not found: ${soundName}`);
       }
 
-      if (sound.readyState < 4) {
-        console.log(`Sound ${soundName} not fully loaded, waiting...`);
-        await new Promise((resolve) => {
-          sound.addEventListener("canplaythrough", resolve, { once: true });
-        });
-      }
-
+      // Reset and play the sound
       sound.currentTime = 0;
       await sound.play();
     } catch (error) {
-      console.error(`Error playing sound ${soundName}:`, error);
+      console.error("Error playing sound:", error);
+    }
+  }
+
+  // Add the preloadSounds method
+  static async preloadSounds(): Promise<void> {
+    if (!this.initialized) {
+      await this.init();
+    }
+
+    try {
+      await Promise.all(
+        Object.values(this.sounds).map((sound) => {
+          if (sound) {
+            return new Promise<void>((resolve, reject) => {
+              sound.addEventListener("canplaythrough", () => resolve(), {
+                once: true,
+              });
+              sound.addEventListener("error", (e) => reject(e), { once: true });
+              sound.load();
+            });
+          }
+          return Promise.resolve();
+        })
+      );
+      console.log("All sounds preloaded successfully");
+    } catch (error) {
+      console.error("Error preloading sounds:", error);
     }
   }
 }
