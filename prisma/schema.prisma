@@ -27,6 +27,7 @@ model UserSettings {
   userId          String   @unique
   focusDuration   Int      @default(25)
   breakDuration   Int      @default(5)
+  volume          Float    @default(0.5)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

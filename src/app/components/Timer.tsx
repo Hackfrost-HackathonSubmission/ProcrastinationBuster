@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from "react";
 import CircularProgress from "./CircularProgress";
 import Settings from "./Settings";
+import { NotificationService } from "@/services/notificationService";
+import { SoundService } from "@/services/soundService";
 
 interface TimerProps {
   initialMinutes?: number;
@@ -13,27 +15,44 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
   const [isActive, setIsActive] = useState(false);
   const [isBreak, setIsBreak] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [settings, setSettings] = useState({
     focusDuration: initialMinutes,
     breakDuration: 5,
+    volume: 0.5,
   });
 
-  // Calculate total time based on current mode
   const totalTime = isBreak
     ? settings.breakDuration * 60
     : settings.focusDuration * 60;
 
-  // Load user settings
+  useEffect(() => {
+    SoundService.init();
+  }, []);
+
+  useEffect(() => {
+    const setupNotifications = async () => {
+      const permitted = await NotificationService.requestPermission();
+      setNotificationsEnabled(permitted);
+    };
+    setupNotifications();
+  }, []);
+
   useEffect(() => {
     const loadSettings = async () => {
       try {
         const response = await fetch("/api/settings");
         const data = await response.json();
         if (data) {
-          setSettings(data);
+          setSettings({
+            focusDuration: data.focusDuration,
+            breakDuration: data.breakDuration,
+            volume: data.volume || 0.5,
+          });
           if (!isBreak) {
             setTimeLeft(data.focusDuration * 60);
           }
+          SoundService.setVolume(data.volume || 0.5);
         }
       } catch (error) {
         console.error("Failed to load settings:", error);
@@ -72,6 +91,7 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
           isBreak,
           focusDuration: settings.focusDuration,
           breakDuration: settings.breakDuration,
+          volume: settings.volume,
         }),
       });
     } catch (error) {
@@ -111,29 +131,19 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
     return () => clearInterval(interval);
   }, [isActive, timeLeft]);
 
-  // Handle timer completion
-  const handleTimerComplete = () => {
-    setIsActive(false);
-    if (isBreak) {
-      // Break is over, start focus time
-      setIsBreak(false);
-      setTimeLeft(settings.focusDuration * 60);
-    } else {
-      // Focus time is over, start break
-      setIsBreak(true);
-      setTimeLeft(settings.breakDuration * 60);
-    }
-    // Play notification sound or show notification here
-  };
-
   const toggleTimer = () => {
     setIsActive(!isActive);
+    SoundService.play("buttonClick");
+    if (!isActive) {
+      saveState();
+    }
   };
 
   const resetTimer = () => {
     setIsActive(false);
     setIsBreak(false);
     setTimeLeft(settings.focusDuration * 60);
+    SoundService.play("buttonClick");
     saveState();
   };
 
@@ -144,11 +154,47 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
       .toString()
       .padStart(2, "0")}`;
   };
+  const handleTimerComplete = async () => {
+    setIsActive(false);
+
+    if (isBreak) {
+      await SoundService.play("breakComplete");
+      if (notificationsEnabled) {
+        await NotificationService.showNotification({
+          title: "Break Complete!",
+          message: "Time to get back to work. Start your focus session.",
+        });
+      }
+      setIsBreak(false);
+      setTimeLeft(settings.focusDuration * 60);
+    } else {
+      await SoundService.play("timerComplete");
+      if (notificationsEnabled) {
+        await NotificationService.showNotification({
+          title: "Focus Session Complete!",
+          message: `Great work! Take a ${settings.breakDuration}-minute break.`,
+        });
+      }
+      setIsBreak(true);
+      setTimeLeft(settings.breakDuration * 60);
+    }
+  };
 
   const progress = ((totalTime - timeLeft) / totalTime) * 100;
 
   return (
     <div className="flex flex-col items-center space-y-6">
+      {!notificationsEnabled && (
+        <div className="text-yellow-400 text-sm mt-2">
+          Enable notifications for timer alerts
+          <button
+            onClick={() => NotificationService.requestPermission()}
+            className="ml-2 underline hover:text-yellow-300"
+          >
+            Enable
+          </button>
+        </div>
+      )}
       <CircularProgress
         progress={progress}
         size={300}
@@ -216,6 +262,22 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
               setTimeLeft(newSettings.focusDuration * 60);
             }
             setIsActive(false);
+          }}
+        />
+      )}
+      {showSettings && (
+        <Settings
+          onClose={() => setShowSettings(false)}
+          initialSettings={settings} // Now includes volume
+          onSave={async (newSettings) => {
+            setSettings(newSettings);
+            setShowSettings(false);
+            if (!isBreak) {
+              setTimeLeft(newSettings.focusDuration * 60);
+            }
+            setIsActive(false);
+            // Update sound volume when settings are saved
+            SoundService.setVolume(newSettings.volume);
           }}
         />
       )}

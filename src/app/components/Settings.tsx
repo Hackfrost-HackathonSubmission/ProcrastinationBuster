@@ -1,13 +1,19 @@
 "use client";
 
 import React, { useState } from "react";
+import { SoundService } from "@/services/soundService";
 
 interface SettingsProps {
   onClose: () => void;
-  onSave: (settings: { focusDuration: number; breakDuration: number }) => void;
+  onSave: (settings: {
+    focusDuration: number;
+    breakDuration: number;
+    volume: number;
+  }) => void;
   initialSettings: {
     focusDuration: number;
     breakDuration: number;
+    volume: number;
   };
 }
 
@@ -17,6 +23,13 @@ const Settings: React.FC<SettingsProps> = ({
   initialSettings,
 }) => {
   const [settings, setSettings] = useState(initialSettings);
+
+  const handleVolumeChange = (value: number) => {
+    const newVolume = value / 100;
+    setSettings((prev) => ({ ...prev, volume: newVolume }));
+    SoundService.setVolume(newVolume);
+    SoundService.play("buttonClick");
+  };
 
   const handleSave = async () => {
     try {
@@ -83,6 +96,23 @@ const Settings: React.FC<SettingsProps> = ({
             />
           </div>
         </div>
+        <div>
+          <label className="block text-gray-300 mb-2">Sound Volume</label>
+          <div className="flex items-center space-x-2">
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={settings.volume * 100}
+              onChange={(e) => handleVolumeChange(Number(e.target.value))}
+              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+            />
+            <span className="text-gray-300 w-12">
+              {Math.round(settings.volume * 100)}%
+            </span>
+          </div>
+        </div>
+
         <div className="flex justify-end space-x-3 mt-6">
           <button
             onClick={onClose}
