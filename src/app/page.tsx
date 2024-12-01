@@ -1,15 +1,12 @@
 // src/app/page.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Timer from "./components/Timer";
-import { BlockedSites } from "./components/BlockedSites";
-import { BlockedPage } from "@/app/components/BlockedPage";
-import { BlockService } from "@/services/blockService";
+import { FocusTasks } from "./components/FocusTask";
 
 const Page = () => {
-  const [activeTab, setActiveTab] = useState<"timer" | "blocked">("timer");
-  const [isBlocked, setIsBlocked] = useState(false);
+  const [activeTab, setActiveTab] = useState<"timer" | "tasks">("timer");
   const [timerState, setTimerState] = useState({
     timeLeft: 25 * 60,
     isActive: false,
@@ -20,23 +17,6 @@ const Page = () => {
       volume: 0.5,
     },
   });
-
-  useEffect(() => {
-    // Check if current site is blocked
-    const checkBlocked = async () => {
-      const blocked = await BlockService.isCurrentSiteBlocked();
-      setIsBlocked(blocked);
-    };
-
-    checkBlocked();
-    // Check every second while timer is running
-    const interval = setInterval(checkBlocked, 1000);
-    return () => clearInterval(interval);
-  }, [timerState.isActive, timerState.isBreak]);
-
-  if (isBlocked) {
-    return <BlockedPage onGoBack={() => setIsBlocked(false)} />;
-  }
 
   return (
     <main className="min-h-screen bg-gray-900">
@@ -52,9 +32,9 @@ const Page = () => {
           Timer
         </button>
         <button
-          onClick={() => setActiveTab("blocked")}
+          onClick={() => setActiveTab("tasks")}
           className={`px-6 py-2 rounded-t-lg transition-colors ${
-            activeTab === "blocked"
+            activeTab === "tasks"
               ? "bg-gray-800 text-white"
               : `${
                   timerState.isActive && !timerState.isBreak
@@ -64,7 +44,7 @@ const Page = () => {
           }`}
           disabled={timerState.isActive && !timerState.isBreak}
         >
-          Blocked Sites
+          Focus Tasks
         </button>
       </div>
 
@@ -79,7 +59,7 @@ const Page = () => {
               />
             </div>
           ) : (
-            <BlockedSites />
+            <FocusTasks />
           )}
         </div>
       </div>
