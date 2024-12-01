@@ -7,21 +7,29 @@ import { NotificationService } from "@/services/notificationService";
 import { SoundService } from "@/services/soundService";
 
 interface TimerProps {
-  initialMinutes?: number;
+  initialMinutes: number;
+  timerState: {
+    timeLeft: number;
+    isActive: boolean;
+    isBreak: boolean;
+    settings: {
+      focusDuration: number;
+      breakDuration: number;
+      volume: number;
+    };
+  };
+  setTimerState: (state: any) => void;
 }
 
-const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
-  const [timeLeft, setTimeLeft] = useState(initialMinutes * 60);
-  const [isRunning, setIsRunning] = useState(false);
-  const [isActive, setIsActive] = useState(false);
-  const [isBreak, setIsBreak] = useState(false);
+const Timer: React.FC<TimerProps> = ({
+  initialMinutes,
+  timerState,
+  setTimerState,
+}) => {
   const [showSettings, setShowSettings] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [settings, setSettings] = useState({
-    focusDuration: initialMinutes,
-    breakDuration: 5,
-    volume: 0.5,
-  });
+
+  const { timeLeft, isActive, isBreak, settings } = timerState;
 
   const totalTime = isBreak
     ? settings.breakDuration * 60
@@ -40,20 +48,22 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
     setupNotifications();
   }, []);
 
+  // Load saved settings
   useEffect(() => {
     const loadSettings = async () => {
       try {
         const response = await fetch("/api/settings");
         const data = await response.json();
         if (data) {
-          setSettings({
-            focusDuration: data.focusDuration,
-            breakDuration: data.breakDuration,
-            volume: data.volume || 0.5,
-          });
-          if (!isBreak) {
-            setTimeLeft(data.focusDuration * 60);
-          }
+          setTimerState((prevState: { timeLeft: any; }) => ({
+            ...prevState,
+            settings: {
+              focusDuration: data.focusDuration,
+              breakDuration: data.breakDuration,
+              volume: data.volume || 0.5,
+            },
+            timeLeft: !isBreak ? data.focusDuration * 60 : prevState.timeLeft,
+          }));
           SoundService.setVolume(data.volume || 0.5);
         }
       } catch (error) {
@@ -63,90 +73,48 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
     loadSettings();
   }, []);
 
-  // Load saved timer state
-  useEffect(() => {
-    const loadState = async () => {
-      try {
-        const response = await fetch("/api/timer");
-        const data = await response.json();
-        if (data && Date.now() - new Date(data.lastUpdate).getTime() < 300000) {
-          setTimeLeft(data.timeLeft);
-          setIsActive(data.isActive);
-          setIsBreak(data.isBreak);
-        }
-      } catch (error) {
-        console.error("Failed to load timer state:", error);
-      }
-    };
-    loadState();
-  }, []);
-
-  // Save timer state
-  const saveState = async () => {
-    try {
-      await fetch("/api/timer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          timeLeft,
-          isActive,
-          isBreak,
-          focusDuration: settings.focusDuration,
-          breakDuration: settings.breakDuration,
-          volume: settings.volume,
-        }),
-      });
-    } catch (error) {
-      console.error("Failed to save timer state:", error);
-    }
-  };
-
-  // Save state periodically and on important changes
-  useEffect(() => {
-    const interval = setInterval(saveState, 60000); // Save every minute
-
-    // Save state when timer is paused or completed
-    if (!isActive) {
-      saveState();
-    }
-
-    return () => clearInterval(interval);
-  }, [timeLeft, isActive, isBreak]);
-
   // Timer countdown effect
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
     if (isActive && timeLeft > 0) {
       interval = setInterval(() => {
-        setTimeLeft((prevTime) => {
-          if (prevTime <= 1) {
-            setIsActive(false);
+        setTimerState((prevState: { timeLeft: number; }) => {
+          if (prevState.timeLeft <= 1) {
             handleTimerComplete();
-            return 0;
+            return {
+              ...prevState,
+              timeLeft: 0,
+              isActive: false,
+            };
           }
-          return prevTime - 1;
+          return {
+            ...prevState,
+            timeLeft: prevState.timeLeft - 1,
+          };
         });
       }, 1000);
     }
 
     return () => clearInterval(interval);
-  }, [isActive, timeLeft]);
+  }, [isActive]);
 
   const toggleTimer = () => {
-    setIsActive(!isActive);
+    setTimerState({
+      ...timerState,
+      isActive: !isActive,
+    });
     SoundService.play("buttonClick");
-    if (!isActive) {
-      saveState();
-    }
   };
 
   const resetTimer = () => {
-    setIsActive(false);
-    setIsBreak(false);
-    setTimeLeft(settings.focusDuration * 60);
+    setTimerState({
+      ...timerState,
+      isActive: false,
+      isBreak: false,
+      timeLeft: settings.focusDuration * 60,
+    });
     SoundService.play("buttonClick");
-    saveState();
   };
 
   const formatTime = (seconds: number): string => {
@@ -156,9 +124,8 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
       .toString()
       .padStart(2, "0")}`;
   };
-  const handleTimerComplete = async () => {
-    setIsActive(false);
 
+  const handleTimerComplete = async () => {
     if (isBreak) {
       await SoundService.play("breakComplete");
       if (notificationsEnabled) {
@@ -167,8 +134,12 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
           message: "Time to get back to work. Start your focus session.",
         });
       }
-      setIsBreak(false);
-      setTimeLeft(settings.focusDuration * 60);
+      setTimerState({
+        ...timerState,
+        isActive: false,
+        isBreak: false,
+        timeLeft: settings.focusDuration * 60,
+      });
     } else {
       await SoundService.play("timerComplete");
       if (notificationsEnabled) {
@@ -177,8 +148,12 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
           message: `Great work! Take a ${settings.breakDuration}-minute break.`,
         });
       }
-      setIsBreak(true);
-      setTimeLeft(settings.breakDuration * 60);
+      setTimerState({
+        ...timerState,
+        isActive: false,
+        isBreak: true,
+        timeLeft: settings.breakDuration * 60,
+      });
     }
   };
 
@@ -258,27 +233,15 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
           onClose={() => setShowSettings(false)}
           initialSettings={settings}
           onSave={async (newSettings) => {
-            setSettings(newSettings);
+            setTimerState((prevState: { timeLeft: any; }) => ({
+              ...prevState,
+              settings: newSettings,
+              timeLeft: !isBreak
+                ? newSettings.focusDuration * 60
+                : prevState.timeLeft,
+              isActive: false,
+            }));
             setShowSettings(false);
-            if (!isBreak) {
-              setTimeLeft(newSettings.focusDuration * 60);
-            }
-            setIsActive(false);
-          }}
-        />
-      )}
-      {showSettings && (
-        <Settings
-          onClose={() => setShowSettings(false)}
-          initialSettings={settings} // Now includes volume
-          onSave={async (newSettings) => {
-            setSettings(newSettings);
-            setShowSettings(false);
-            if (!isBreak) {
-              setTimeLeft(newSettings.focusDuration * 60);
-            }
-            setIsActive(false);
-            // Update sound volume when settings are saved
             SoundService.setVolume(newSettings.volume);
           }}
         />

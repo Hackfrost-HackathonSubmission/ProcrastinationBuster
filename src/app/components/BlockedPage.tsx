@@ -1,8 +1,13 @@
-"use client";
-export const BlockedPage: React.FC = () => {
+import React from "react";
+
+interface BlockedPageProps {
+  onGoBack: () => void;
+}
+
+export const BlockedPage: React.FC<BlockedPageProps> = ({ onGoBack }) => {
   return (
-    <div className="w-full p-8 text-center">
-      <div className="bg-gray-800 rounded-xl p-8 shadow-purple-500/5">
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="text-center p-8 bg-gray-800 rounded-xl shadow-2xl shadow-purple-500/5">
         <h1 className="text-4xl font-bold text-white mb-4">
           Focus Mode Active
         </h1>
@@ -13,7 +18,7 @@ export const BlockedPage: React.FC = () => {
           <p className="text-xl">Time to get back to work! 💪</p>
         </div>
         <button
-          onClick={() => window.history.back()}
+          onClick={onGoBack}
           className="mt-4 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
         >
           Go Back
