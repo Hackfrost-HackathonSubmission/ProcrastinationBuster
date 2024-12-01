@@ -12,6 +12,7 @@ export async function GET() {
     });
     return NextResponse.json(timerState);
   } catch (error) {
+    console.log(error);
     return Response.json({ success: false }, { status: 500 });
   }
 }
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(timerState);
   } catch (error) {
+    console.log(error);
     return Response.json({ success: false }, { status: 500 });
   }
 }
