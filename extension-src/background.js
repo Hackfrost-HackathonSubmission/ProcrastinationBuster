@@ -638,6 +638,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
+const analytics = ProductivityAnalytics;
+async function initializeExtension() {
+  try {
+    await Promise.all([
+      settingsManager.initialize(),
+      notificationManager.initialize(),
+      syncManager.initialize(),
+      ProductivityAnalytics.initialize(),
+    ]);
+
+    setupEventListeners();
+    startIdleDetection();
+  } catch (error) {
+    console.error("Extension initialization failed:", error);
+  }
+}
 const ANALYTICS_VERSION = "1.0";
 const ANALYTICS_INTERVALS = {
   DAILY: "daily",
@@ -1775,9 +1791,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// background.js
-
-// Import required managers and utilities
 const settingsManager = SettingsManager.getInstance();
 const notificationManager = NotificationManager.getInstance();
 const activityTracker = ActivityTracker.getInstance();
@@ -1993,9 +2006,8 @@ function updateBadge() {
 
 // Get activity statistics
 async function getActivityStats(timeRange) {
-  return await activityTracker.generateAnalytics(timeRange);
+  return await ProductivityAnalytics.getDailyStats(new Date());
 }
-
 // Determine activity type based on URL
 async function determineActivityType(url) {
   if (!url) return "break";
