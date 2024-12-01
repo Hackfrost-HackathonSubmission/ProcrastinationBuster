@@ -2,27 +2,30 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { FocusTask } from "@/types";
 
-interface FocusTask {
-  id: string;
-  title: string;
-  duration: number; // duration in minutes
-  isCompleted: boolean;
-  createdAt: Date;
+interface FocusTasksProps {
+  onTaskSelect?: (task: FocusTask) => void;
+  activeTaskId?: string;
 }
 
-export const FocusTasks: React.FC = () => {
+export const FocusTasks: React.FC<FocusTasksProps> = ({
+  onTaskSelect,
+  activeTaskId,
+}) => {
   const [tasks, setTasks] = useState<FocusTask[]>([]);
   const [newTask, setNewTask] = useState("");
-  const [taskDuration, setTaskDuration] = useState(25); // Default 25 minutes
+  const [taskDuration, setTaskDuration] = useState(25);
 
   useEffect(() => {
     const savedTasks = localStorage.getItem("focusTasks");
     if (savedTasks) {
-      setTasks(JSON.parse(savedTasks).map((task: FocusTask) => ({
-        ...task,
-        createdAt: new Date(task.createdAt)
-      })));
+      setTasks(
+        JSON.parse(savedTasks).map((task: FocusTask) => ({
+          ...task,
+          createdAt: new Date(task.createdAt),
+        }))
+      );
     }
   }, []);
 
@@ -40,7 +43,8 @@ export const FocusTasks: React.FC = () => {
       title: newTask,
       duration: taskDuration,
       isCompleted: false,
-      createdAt: new Date()
+      createdAt: new Date(),
+      timeSpent: 0,
     };
 
     saveTasks([...tasks, newTaskItem]);
@@ -48,14 +52,14 @@ export const FocusTasks: React.FC = () => {
   };
 
   const handleToggleTask = (id: string) => {
-    const updatedTasks = tasks.map(task => 
+    const updatedTasks = tasks.map((task) =>
       task.id === id ? { ...task, isCompleted: !task.isCompleted } : task
     );
     saveTasks(updatedTasks);
   };
 
   const handleRemoveTask = (id: string) => {
-    const updatedTasks = tasks.filter(task => task.id !== id);
+    const updatedTasks = tasks.filter((task) => task.id !== id);
     saveTasks(updatedTasks);
   };
 
@@ -63,7 +67,6 @@ export const FocusTasks: React.FC = () => {
     <div className="p-4">
       <h2 className="text-xl font-bold mb-4 text-white">Focus Tasks</h2>
 
-      {/* Add new task form */}
       <form onSubmit={handleAddTask} className="mb-4 space-y-3">
         <div className="flex gap-2">
           <input
@@ -91,7 +94,6 @@ export const FocusTasks: React.FC = () => {
         </div>
       </form>
 
-      {/* List of tasks */}
       <div className="space-y-2">
         {tasks.length === 0 ? (
           <p className="text-gray-400 text-center py-4">
@@ -101,7 +103,9 @@ export const FocusTasks: React.FC = () => {
           tasks.map((task) => (
             <div
               key={task.id}
-              className="flex items-center justify-between p-3 bg-gray-700 border border-gray-600 rounded"
+              className={`flex items-center justify-between p-3 bg-gray-700 border border-gray-600 rounded ${
+                activeTaskId === task.id ? "border-purple-500" : ""
+              }`}
             >
               <div className="flex items-center gap-3 flex-1">
                 <input
@@ -111,17 +115,34 @@ export const FocusTasks: React.FC = () => {
                   className="w-4 h-4 rounded border-gray-500 text-purple-600 focus:ring-purple-500 bg-gray-600"
                 />
                 <div className="flex flex-col">
-                  <span className={`${task.isCompleted ? "line-through text-gray-400" : "text-white"}`}>
+                  <span
+                    className={
+                      task.isCompleted
+                        ? "line-through text-gray-400"
+                        : "text-white"
+                    }
+                  >
                     {task.title}
                   </span>
                   <span className="text-sm text-gray-400">
-                    {task.duration} minutes focus time
+                    {task.duration} minutes planned
+                    {task.timeSpent
+                      ? ` • ${Math.floor(task.timeSpent / 60)} minutes spent`
+                      : ""}
                   </span>
                 </div>
               </div>
+              {!task.isCompleted && !activeTaskId && (
+                <button
+                  onClick={() => onTaskSelect?.(task)}
+                  className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 transition-colors mr-2"
+                >
+                  Focus
+                </button>
+              )}
               <button
                 onClick={() => handleRemoveTask(task.id)}
-                className="text-red-400 hover:text-red-300 transition-colors ml-4"
+                className="text-red-400 hover:text-red-300 transition-colors"
               >
                 Remove
               </button>
@@ -130,14 +151,16 @@ export const FocusTasks: React.FC = () => {
         )}
       </div>
 
-      {/* Summary section */}
       {tasks.length > 0 && (
         <div className="mt-6 p-4 bg-gray-700 rounded border border-gray-600">
           <h3 className="text-white font-semibold mb-2">Summary</h3>
           <div className="text-gray-300 space-y-1">
             <p>Total Tasks: {tasks.length}</p>
-            <p>Completed: {tasks.filter(t => t.isCompleted).length}</p>
-            <p>Total Focus Time: {tasks.reduce((acc, t) => acc + t.duration, 0)} minutes</p>
+            <p>Completed: {tasks.filter((t) => t.isCompleted).length}</p>
+            <p>
+              Total Focus Time: {tasks.reduce((acc, t) => acc + t.duration, 0)}{" "}
+              minutes
+            </p>
           </div>
         </div>
       )}
