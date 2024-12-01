@@ -10,8 +10,86 @@ interface TimerProps {
 const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
   const [timeLeft, setTimeLeft] = useState(initialMinutes * 60);
   const [isActive, setIsActive] = useState(false);
-  const totalTime = initialMinutes * 60;
+  const [isBreak, setIsBreak] = useState(false);
+  const [settings, setSettings] = useState({
+    focusDuration: initialMinutes,
+    breakDuration: 5,
+  });
 
+  // Calculate total time based on current mode
+  const totalTime = isBreak
+    ? settings.breakDuration * 60
+    : settings.focusDuration * 60;
+
+  // Load user settings
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const response = await fetch("/api/settings");
+        const data = await response.json();
+        if (data) {
+          setSettings(data);
+          if (!isBreak) {
+            setTimeLeft(data.focusDuration * 60);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load settings:", error);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  // Load saved timer state
+  useEffect(() => {
+    const loadState = async () => {
+      try {
+        const response = await fetch("/api/timer");
+        const data = await response.json();
+        if (data && Date.now() - new Date(data.lastUpdate).getTime() < 300000) {
+          setTimeLeft(data.timeLeft);
+          setIsActive(data.isActive);
+          setIsBreak(data.isBreak);
+        }
+      } catch (error) {
+        console.error("Failed to load timer state:", error);
+      }
+    };
+    loadState();
+  }, []);
+
+  // Save timer state
+  const saveState = async () => {
+    try {
+      await fetch("/api/timer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          timeLeft,
+          isActive,
+          isBreak,
+          focusDuration: settings.focusDuration,
+          breakDuration: settings.breakDuration,
+        }),
+      });
+    } catch (error) {
+      console.error("Failed to save timer state:", error);
+    }
+  };
+
+  // Save state periodically and on important changes
+  useEffect(() => {
+    const interval = setInterval(saveState, 60000); // Save every minute
+
+    // Save state when timer is paused or completed
+    if (!isActive) {
+      saveState();
+    }
+
+    return () => clearInterval(interval);
+  }, [timeLeft, isActive, isBreak]);
+
+  // Timer countdown effect
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
@@ -20,6 +98,7 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
         setTimeLeft((prevTime) => {
           if (prevTime <= 1) {
             setIsActive(false);
+            handleTimerComplete();
             return 0;
           }
           return prevTime - 1;
@@ -30,13 +109,30 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
     return () => clearInterval(interval);
   }, [isActive, timeLeft]);
 
+  // Handle timer completion
+  const handleTimerComplete = () => {
+    setIsActive(false);
+    if (isBreak) {
+      // Break is over, start focus time
+      setIsBreak(false);
+      setTimeLeft(settings.focusDuration * 60);
+    } else {
+      // Focus time is over, start break
+      setIsBreak(true);
+      setTimeLeft(settings.breakDuration * 60);
+    }
+    // Play notification sound or show notification here
+  };
+
   const toggleTimer = () => {
     setIsActive(!isActive);
   };
 
   const resetTimer = () => {
     setIsActive(false);
-    setTimeLeft(initialMinutes * 60);
+    setIsBreak(false);
+    setTimeLeft(settings.focusDuration * 60);
+    saveState();
   };
 
   const formatTime = (seconds: number): string => {
@@ -55,7 +151,13 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
         progress={progress}
         size={300}
         strokeWidth={20}
-        color={isActive ? "stroke-emerald-400" : "stroke-purple-500"}
+        color={
+          isBreak
+            ? "stroke-yellow-400"
+            : isActive
+            ? "stroke-emerald-400"
+            : "stroke-purple-500"
+        }
         backgroundColor="stroke-gray-700"
         className="transition-all duration-300"
       >
@@ -64,7 +166,11 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
             {formatTime(timeLeft)}
           </div>
           <div className="text-gray-400">
-            {isActive ? "Focus Time" : "Ready to Focus?"}
+            {isBreak
+              ? "Break Time"
+              : isActive
+              ? "Focus Time"
+              : "Ready to Focus?"}
           </div>
         </div>
       </CircularProgress>
