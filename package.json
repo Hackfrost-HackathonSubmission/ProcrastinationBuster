@@ -9,7 +9,8 @@
     "lint": "next lint",
     "db:up": "docker-compose up -d",
     "db:down": "docker-compose down",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "build-extension": "next build && cp public/{manifest.json,background.js,blocked.html} out/"
   },
   "dependencies": {
     "next": "15.0.3",
@@ -18,6 +19,7 @@
   },
   "devDependencies": {
     "@prisma/client": "^6.0.0",
+    "@types/chrome": "^0.0.287",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

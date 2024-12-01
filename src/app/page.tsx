@@ -23,14 +23,9 @@ const Page = () => {
 
   useEffect(() => {
     // Check if current site is blocked
-    const checkBlocked = () => {
-      if (
-        BlockService.isCurrentSiteBlocked() &&
-        timerState.isActive &&
-        !timerState.isBreak
-      ) {
-        setIsBlocked(true);
-      }
+    const checkBlocked = async () => {
+      const blocked = await BlockService.isCurrentSiteBlocked();
+      setIsBlocked(blocked);
     };
 
     checkBlocked();
@@ -38,14 +33,6 @@ const Page = () => {
     const interval = setInterval(checkBlocked, 1000);
     return () => clearInterval(interval);
   }, [timerState.isActive, timerState.isBreak]);
-
-  // Prevent access to blocked sites tab while timer is active
-  const handleTabChange = (tab: "timer" | "blocked") => {
-    if (tab === "blocked" && timerState.isActive && !timerState.isBreak) {
-      return; // Don't allow switching to blocked sites during focus time
-    }
-    setActiveTab(tab);
-  };
 
   if (isBlocked) {
     return <BlockedPage onGoBack={() => setIsBlocked(false)} />;
@@ -55,7 +42,7 @@ const Page = () => {
     <main className="min-h-screen bg-gray-900">
       <div className="flex justify-center pt-6 space-x-4">
         <button
-          onClick={() => handleTabChange("timer")}
+          onClick={() => setActiveTab("timer")}
           className={`px-6 py-2 rounded-t-lg transition-colors ${
             activeTab === "timer"
               ? "bg-gray-800 text-white"
@@ -65,7 +52,7 @@ const Page = () => {
           Timer
         </button>
         <button
-          onClick={() => handleTabChange("blocked")}
+          onClick={() => setActiveTab("blocked")}
           className={`px-6 py-2 rounded-t-lg transition-colors ${
             activeTab === "blocked"
               ? "bg-gray-800 text-white"

@@ -5,30 +5,44 @@ import React, { useState, useEffect } from "react";
 import { BlockService } from "@/services/blockService";
 
 export const BlockedSites: React.FC = () => {
-  const [sites, setSites] = useState(BlockService.getBlockedSites());
+  const [sites, setSites] = useState<
+    Array<{
+      url: string;
+      isActive: boolean;
+      createdAt: Date;
+    }>
+  >([]);
   const [newSite, setNewSite] = useState("");
 
+  // Load sites when component mounts
   useEffect(() => {
-    setSites(BlockService.getBlockedSites());
+    const loadSites = async () => {
+      const blockedSites = await BlockService.getBlockedSites();
+      setSites(blockedSites);
+    };
+    loadSites();
   }, []);
 
-  const handleAddSite = (e: React.FormEvent) => {
+  const handleAddSite = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSite) return;
 
-    BlockService.addBlockedSite(newSite);
-    setSites(BlockService.getBlockedSites());
+    await BlockService.addBlockedSite(newSite);
+    const updatedSites = await BlockService.getBlockedSites();
+    setSites(updatedSites);
     setNewSite("");
   };
 
-  const handleToggleSite = (url: string) => {
-    BlockService.toggleBlockedSite(url);
-    setSites(BlockService.getBlockedSites());
+  const handleToggleSite = async (url: string) => {
+    await BlockService.toggleBlockedSite(url);
+    const updatedSites = await BlockService.getBlockedSites();
+    setSites(updatedSites);
   };
 
-  const handleRemoveSite = (url: string) => {
-    BlockService.removeBlockedSite(url);
-    setSites(BlockService.getBlockedSites());
+  const handleRemoveSite = async (url: string) => {
+    await BlockService.removeBlockedSite(url);
+    const updatedSites = await BlockService.getBlockedSites();
+    setSites(updatedSites);
   };
 
   return (
