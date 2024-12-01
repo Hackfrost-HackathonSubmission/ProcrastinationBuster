@@ -19,3 +19,10 @@ chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
     });
   }
 });
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === "local" && changes.blockedSites) {
+    console.log("Blocked sites updated:", changes.blockedSites.newValue);
+    // Refresh your blocking logic if needed
+  }
+});

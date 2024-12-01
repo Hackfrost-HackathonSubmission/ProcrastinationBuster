@@ -27,10 +27,19 @@ export const BlockedSites: React.FC = () => {
     e.preventDefault();
     if (!newSite) return;
 
-    await BlockService.addBlockedSite(newSite);
-    const updatedSites = await BlockService.getBlockedSites();
-    setSites(updatedSites);
-    setNewSite("");
+    try {
+      const site = await BlockService.addBlockedSite(newSite);
+      console.log("Site added:", site); // Debug log
+
+      const updatedSites = await BlockService.getBlockedSites();
+      console.log("Updated sites:", updatedSites); // Debug log
+
+      setSites(updatedSites);
+      setNewSite("");
+    } catch (error) {
+      console.error("Failed to add site:", error);
+      alert("Failed to add site. Please try again.");
+    }
   };
 
   const handleToggleSite = async (url: string) => {
