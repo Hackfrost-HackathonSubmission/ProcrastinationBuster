@@ -16,5 +16,11 @@
   },
   "action": {
     "default_popup": "index.html"
+  },
+  "externally_connectable": {
+    "matches": [
+      "*://localhost/*",
+      "*://your-webapp-domain.com/*"
+    ]
   }
 }

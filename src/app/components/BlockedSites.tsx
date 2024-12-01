@@ -22,6 +22,7 @@ export const BlockedSites: React.FC = () => {
     };
     loadSites();
   }, []);
+  
 
   const handleAddSite = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,28 +1,34 @@
-chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
-  // Get blocked sites from storage
-  const { blockedSites } = await chrome.storage.local.get("blockedSites");
-
-  if (!blockedSites) return;
-
-  // Check if the URL matches any blocked sites
-  const url = new URL(details.url);
-  const hostname = url.hostname.replace("www.", "");
-
-  const isBlocked = blockedSites.some(
-    (site) => site.isActive && hostname.includes(site.url)
-  );
-
-  if (isBlocked) {
-    // Redirect to your blocked page
-    chrome.tabs.update(details.tabId, {
-      url: chrome.runtime.getURL("blocked.html"),
-    });
+// public/background.js
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "UPDATE_BLOCKED_SITES") {
+    chrome.storage.local.set(
+      {
+        blockedSites: message.sites,
+      },
+      () => {
+        // Notify all extension windows
+        chrome.runtime.sendMessage({
+          type: "SITES_UPDATED",
+          sites: message.sites,
+        });
+      }
+    );
   }
 });
 
-chrome.storage.onChanged.addListener((changes, namespace) => {
-  if (namespace === "local" && changes.blockedSites) {
-    console.log("Blocked sites updated:", changes.blockedSites.newValue);
-    // Refresh your blocking logic if needed
+// Listen for web app events
+chrome.runtime.onMessageExternal.addListener(
+  (request, sender, sendResponse) => {
+    if (request.type === "UPDATE_BLOCKED_SITES") {
+      chrome.storage.local.set(
+        {
+          blockedSites: request.sites,
+        },
+        () => {
+          sendResponse({ success: true });
+        }
+      );
+    }
+    return true; // Required for async response
   }
-});
+);
