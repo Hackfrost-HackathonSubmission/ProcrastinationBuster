@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import CircularProgress from "./CircularProgress";
+import Settings from "./Settings";
 
 interface TimerProps {
   initialMinutes?: number;
@@ -11,6 +12,7 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
   const [timeLeft, setTimeLeft] = useState(initialMinutes * 60);
   const [isActive, setIsActive] = useState(false);
   const [isBreak, setIsBreak] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState({
     focusDuration: initialMinutes,
     breakDuration: 5,
@@ -194,7 +196,29 @@ const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
         >
           Reset
         </button>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="px-6 py-2 rounded-lg text-gray-300 font-medium border border-gray-700
+                    hover:bg-gray-700 transition-colors shadow-lg"
+        >
+          Settings
+        </button>
       </div>
+
+      {showSettings && (
+        <Settings
+          onClose={() => setShowSettings(false)}
+          initialSettings={settings}
+          onSave={async (newSettings) => {
+            setSettings(newSettings);
+            setShowSettings(false);
+            if (!isBreak) {
+              setTimeLeft(newSettings.focusDuration * 60);
+            }
+            setIsActive(false);
+          }}
+        />
+      )}
     </div>
   );
 };
