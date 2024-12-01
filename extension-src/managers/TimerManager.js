@@ -1,5 +1,4 @@
-
-import SettingsManager from "/managers/SettingsManager.js";
+import SettingsManager from "./SettingsManager.js";
 export const TIMER_STATES = {
   IDLE: "idle",
   FOCUS: "focus",
@@ -18,28 +17,42 @@ export class TimerManager {
       currentStreak: 0,
       lastCompletedDate: null,
     };
+    // Initialize SettingsManager instance
+    this.settingsManager = SettingsManager.getInstance();
   }
 
-  static getInstance() {
-    if (!TimerManager.instance) {
-      TimerManager.instance = new TimerManager();
+  // Add initialize method
+  async initialize() {
+    try {
+      // Initialize settings first
+      await this.settingsManager.initialize();
+
+      // Load saved timer state if exists
+      const data = await chrome.storage.local.get(["timerState", "streakData"]);
+      if (data.timerState) {
+        this.timerState = data.timerState;
+      }
+      if (data.streakData) {
+        this.streakData = data.streakData;
+      }
+    } catch (error) {
+      console.error("Failed to initialize timer:", error);
     }
-    return TimerManager.instance;
   }
 
-  initializeTimerState() {
-    return {
-      state: TIMER_STATES.IDLE,
-      remainingTime: 0,
-      startTime: null,
-      duration: 0,
-      type: null,
-    };
-  }
-
+  // Update startTimer to use settings
   async startTimer(minutes, type = TIMER_STATES.FOCUS) {
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
+    }
+
+    // If minutes not provided, get from settings
+    if (!minutes) {
+      const settings = await this.settingsManager.getSettings();
+      minutes =
+        type === TIMER_STATES.FOCUS
+          ? settings.focusDuration
+          : settings.shortBreakDuration;
     }
 
     this.currentSession = {
@@ -55,31 +68,80 @@ export class TimerManager {
     this.timerInterval = setInterval(() => this.updateTimer(), 1000);
     await this.updateBadgeState();
 
-    // Schedule break reminder if it's a focus session
+    // Use settings for break reminder
     if (type === TIMER_STATES.FOCUS) {
-      this.scheduleBreakReminder(minutes);
+      const settings = await this.settingsManager.getSettings();
+      if (settings.notifications?.breakReminders) {
+        this.scheduleBreakReminder(minutes);
+      }
     }
 
-    // Notify other managers
     chrome.runtime.sendMessage({
       action: "timerStarted",
       data: { minutes, type },
     });
   }
 
-  async pauseTimer() {
-    if (this.timerState !== TIMER_STATES.IDLE) {
+  // Update endTimer to handle auto-start breaks
+  async endTimer(completed = true) {
+    if (this.timerInterval) {
       clearInterval(this.timerInterval);
-      this.timerState = TIMER_STATES.PAUSED;
-      await this.updateBadgeState();
+    }
+
+    if (completed && this.currentSession) {
+      await this.updateStreak();
+      await this.updateSessionStats();
+
+      const settings = await this.settingsManager.getSettings();
+
+      // Show completion notification if enabled
+      if (settings.notifications?.enabled) {
+        this.showCompletionNotification();
+      }
 
       chrome.runtime.sendMessage({
-        action: "timerPaused",
-        data: { remainingTime: this.remainingTime },
+        action: "timerCompleted",
+        data: {
+          sessionType: this.currentSession.type,
+          duration: this.currentSession.duration,
+        },
+      });
+
+      // Auto start break if enabled
+      if (
+        this.currentSession.type === TIMER_STATES.FOCUS &&
+        settings.autoStartBreaks
+      ) {
+        const breakDuration = settings.shortBreakDuration;
+        await this.startTimer(breakDuration, TIMER_STATES.BREAK);
+        return;
+      }
+    }
+
+    this.currentSession = null;
+    this.timerState = TIMER_STATES.IDLE;
+    this.remainingTime = 0;
+    await this.updateBadgeState();
+  }
+
+  // Add method for showing notifications
+  async showCompletionNotification() {
+    const settings = await this.settingsManager.getSettings();
+    if (settings.notifications?.enabled) {
+      const message =
+        this.currentSession.type === TIMER_STATES.FOCUS
+          ? "Focus session completed! Time for a break."
+          : "Break time is over! Ready to focus again?";
+
+      chrome.notifications.create({
+        type: "basic",
+        iconUrl: "/icon48.png",
+        title: "ProcrastinationBuster",
+        message: message,
+        silent: !settings.notifications.sound,
       });
     }
   }
-
   async resumeTimer() {
     if (this.timerState === TIMER_STATES.PAUSED) {
       this.timerInterval = setInterval(() => this.updateTimer(), 1000);
@@ -92,31 +154,6 @@ export class TimerManager {
       });
     }
   }
-
-  async endTimer(completed = true) {
-    if (this.timerInterval) {
-      clearInterval(this.timerInterval);
-    }
-
-    if (completed && this.currentSession) {
-      await this.updateStreak();
-      await this.updateSessionStats();
-
-      chrome.runtime.sendMessage({
-        action: "timerCompleted",
-        data: {
-          sessionType: this.currentSession.type,
-          duration: this.currentSession.duration,
-        },
-      });
-    }
-
-    this.currentSession = null;
-    this.timerState = TIMER_STATES.IDLE;
-    this.remainingTime = 0;
-    await this.updateBadgeState();
-  }
-
   updateTimer() {
     if (this.remainingTime > 0) {
       this.remainingTime--;

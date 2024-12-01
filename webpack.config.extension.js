@@ -8,7 +8,7 @@ module.exports = {
     background: "./extension-src/background.js",
   },
   output: {
-    path: path.resolve(__dirname, "extension"), // This is where all built files will go
+    path: path.resolve(__dirname, "extension"),
     filename: "[name].bundle.js",
     clean: true,
   },
@@ -32,6 +32,16 @@ module.exports = {
         },
       },
       {
+        test: /\.js$/,
+        exclude: /node_modules/,
+        use: {
+          loader: "babel-loader",
+          options: {
+            presets: ["@babel/preset-env"],
+          },
+        },
+      },
+      {
         test: /\.css$/,
         use: ["style-loader", "css-loader"],
       },
@@ -39,15 +49,19 @@ module.exports = {
   },
   resolve: {
     extensions: [".tsx", ".ts", ".js", ".jsx"],
+    modules: [
+      path.resolve(__dirname, "extension-src"),
+      path.resolve(__dirname, "node_modules"),
+    ],
     alias: {
       "@": path.resolve(__dirname, "src"),
+      managers: path.resolve(__dirname, "extension-src/managers"),
     },
   },
   plugins: [
     new CopyPlugin({
       patterns: [
         { from: "extension-src/manifest.json", to: "manifest.json" },
-        { from: "extension-src/background.js", to: "background.js" },
         { from: "extension-src/popup.html", to: "popup.html" },
         { from: "extension-src/blocked.html", to: "blocked.html" },
         { from: "extension-src/icon48.png", to: "icon48.png" },
