@@ -12,10 +12,7 @@ export async function GET() {
     });
     return NextResponse.json(timerState);
   } catch (error) {
-    return NextResponse.json(
-      { error: "Failed to fetch timer state" },
-      { status: 500 }
-    );
+    return Response.json({ success: false }, { status: 500 });
   }
 }
 
@@ -34,9 +31,6 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(timerState);
   } catch (error) {
-    return NextResponse.json(
-      { error: "Failed to save timer state" },
-      { status: 500 }
-    );
+    return Response.json({ success: false }, { status: 500 });
   }
 }

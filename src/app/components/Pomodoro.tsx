@@ -1,6 +1,12 @@
-// src/components/PomodoroTimer.tsx
-import { useState, useEffect } from "react";
-import { TimerSettings } from "@/types";
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+
+interface TimerSettings {
+  focusDuration: number;
+  breakDuration: number;
+  isActive: boolean;
+}
 
 export default function PomodoroTimer() {
   const [settings, setSettings] = useState<TimerSettings>({
@@ -11,28 +17,41 @@ export default function PomodoroTimer() {
   const [timeLeft, setTimeLeft] = useState(settings.focusDuration * 60);
   const [isBreak, setIsBreak] = useState(false);
 
+  const handleTimerComplete = useCallback(() => {
+    if (!isBreak) {
+      setTimeLeft(settings.breakDuration * 60);
+      setIsBreak(true);
+    } else {
+      setTimeLeft(settings.focusDuration * 60);
+      setIsBreak(false);
+      setSettings((prev) => ({ ...prev, isActive: false }));
+    }
+  }, [isBreak, settings.breakDuration, settings.focusDuration]);
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
     if (settings.isActive && timeLeft > 0) {
       interval = setInterval(() => {
-        setTimeLeft((prevTime) => prevTime - 1);
+        setTimeLeft((prevTime) => {
+          if (prevTime <= 1) {
+            handleTimerComplete();
+            return 0;
+          }
+          return prevTime - 1;
+        });
       }, 1000);
-    } else if (timeLeft === 0) {
-      if (!isBreak) {
-        // Focus session completed
-        setTimeLeft(settings.breakDuration * 60);
-        setIsBreak(true);
-      } else {
-        // Break completed
-        setTimeLeft(settings.focusDuration * 60);
-        setIsBreak(false);
-        setSettings((prev) => ({ ...prev, isActive: false }));
-      }
     }
 
     return () => clearInterval(interval);
-  }, [settings.isActive, timeLeft, isBreak]);
+  }, [settings.isActive, timeLeft, handleTimerComplete]);
+
+  // Reset timeLeft when break/focus durations change
+  useEffect(() => {
+    setTimeLeft(
+      isBreak ? settings.breakDuration * 60 : settings.focusDuration * 60
+    );
+  }, [isBreak, settings.breakDuration, settings.focusDuration]);
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -46,8 +65,6 @@ export default function PomodoroTimer() {
     setSettings((prev) => ({
       ...prev,
       isActive: !prev.isActive,
-      startTime: !prev.isActive ? Date.now() : undefined,
-      endTime: prev.isActive ? Date.now() : undefined,
     }));
   };
 
