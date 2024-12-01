@@ -12,6 +12,7 @@ interface TimerProps {
 
 const Timer: React.FC<TimerProps> = ({ initialMinutes = 25 }) => {
   const [timeLeft, setTimeLeft] = useState(initialMinutes * 60);
+  const [isRunning, setIsRunning] = useState(false);
   const [isActive, setIsActive] = useState(false);
   const [isBreak, setIsBreak] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
